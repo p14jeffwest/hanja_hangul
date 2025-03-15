@@ -1,0 +1,13 @@
+[package]
+name = "hanja_hangul"
+version = "0.1.0"
+authors = ["Jeff(Heejin Park) <p14jeffwest@gmail.com>"]
+edition = "2021"
+description = "A Library that converts Chinese characters to Korean characters. That is, convert hanja to hangul"
+keywords = ["hanja", "chinese character", "hanaja2hangul"]
+license = "MIT OR Apache-2.0"
+include = ["src/lib.rs", "Cargo.toml", "hanja_char.csv", "dueum.csv", "hanja_word.csv", "sample.txt"]
+readme = "README.md"
+
+[dependencies]
+tokio = { version = "1.44.0", features = ["full"] }
