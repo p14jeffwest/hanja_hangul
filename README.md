@@ -12,11 +12,11 @@ The library provides the following functions:
 
 ## Dictionary Files
 
-The dictionary files should exist in the same directory as the executable file. The dictionary files should be named as follows:
+The dictionary files should exist in the same directory as the executable file. The dictionary files can be downloaded from the following URLs:
 
-- `hanja_char.csv` - A CSV file that contains the mapping of Chinese characters to Korean characters.
-- `dueum.csv` - A CSV file that contains the mapping of Korean characters to Korean characters according to the dueum law.
-- `hanja_word.csv` - A CSV file that contains the mapping of Chinese words to Korean words.
+- `hanja_char.csv` - [Download](https://github.com/p14jeffwest/hanja_hangul/blob/main/hanja_char.csv)
+- `dueum.csv` - [Download](https://github.com/p14jeffwest/hanja_hangul/blob/main/dueum.csv)
+- `hanja_word.csv` - [Download](https://github.com/p14jeffwest/hanja_hangul/blob/main/hanja_word.csv)
 
 ## Examples
 
