@@ -77,6 +77,96 @@
 //! 'hanja_word.csv' 파일에, 불규칙하게 변환되는 단어들을 가능한 많이 넣어두긴 했는데, 모든 경우를 다 매핑했다고 할 수는 없습니다.
 //! 만약 변환 결과가 맞지 않는 경우, 'hanja_word.csv' 파일에 새로운 매핑을 추가하면 됩니다. 
 //! 
+//! 아래 코드는 'hanja_hangul' 라이브러리를 사용하여 'sample.txt' 파일에 있는 한자를 한글로 변환한 후, 'sample_hangul.txt' 파일에 저장하는 코드입니다.
+//! 
+//! ```
+//! use hanja_hangul as h2h;
+//! use hanja_hangul as h2h;
+//! use std::error::Error;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn Error>> {
+//!     let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary()?;
+//!     h2h::chi2kor_file("sample.txt", "sample_hangul.txt", &char_dic, &dueum_dic, &word_dic).await?;
+//!     Ok(())
+//! }
+//! ```
+//! 
+//! 원래 sample.txt에는 아래와 같이 한자가 포함되어 있습니다.
+//! 
+//! ```
+//! 「宋寅壽기자」14일 농림해양수산위의 농협 국감에선 올해 추곡수매와 농산물시장 
+//! 개방에 따른 대책 등이 주요 쟁점으로 대두됐다. 
+//! 
+//! 客車, 六月, 庫間, 女子
+//! 
+//! 金泳鎭(국민회의) 韓灝鮮(자민련) 權五乙의원(민주당)은 ......
+//! ```
+//! 
+//! 이것을 chi2kor_file 함수를 사용하여 한글로 변환하면 아래와 같이 변환됩니다.
+//! 
+//! ```
+//! 「송인수기자」14일 농림해양수산위의 농협 국감에선 올해 추곡수매와 농산물시장
+//! 개방에 따른 대책 등이 주요 쟁점으로 대두됐다. 
+//! 
+//! 객차, 유월, 곳간, 여자
+//! 
+//! 김영진(국민회의) 한호선(자민련) 권오을의원(민주당)은 ......
+//! ```
+//! 
+//! 일반 한자에 대한 한글 변환 및 두음법칙, 동음이자, 사이시옷 규칙에 의한 불규칙한 한글변환도 잘 되고 있음을 알 수 있습니다. 
+//! 
+//! # Note
+//! 한자를 한글로 변환할 때 사용된 방법을 소개하겠습니다.
+//! 
+//! 각 문자에는 유니코드가 할당되어 있습니다. 한자에도 코드가 부여되어 있고, 한국, 중국, 일본에서 한자를 사용하다 보니, 굉장히 많은 코드가 한자에 부여되어 있습니다.
+//! 이 라이브러리에서 사용하는 코드는 27,848개의 한자코드입니다. 모두 엑셀에서 한글로 변환 가능한 코드입니다.
+//! 
+//! * 한중일 통합 한자: 19968 ~ 40869 (20902개)
+//! * 한중일 통합 한자 확장 A: 13312 ~ 19893 (6582개)
+//! * 한중일 호환 한자1: 63744 ~ 64045 (302개)
+//! * 한중일 호환 한자2: 64048 ~ 64109 (62개)
+//! 
+//! 이 코드를 이용하여 한자를 한글로 변환하는 것이 이 라이브러리의 핵심입니다.
+//! 이 코드는 한자에 대한 유니코드에 대한 설명이 나와 있는 다른 자료와 코드 범위와 개수가 좀 다를 수 있습니다. 
+//! 이 범위는 실제 엑셀에서 변환 가능한 범위를 기준으로 하였습니다. 기초 변환 자료를 엑셀로 만들어서 변환하다 보니, 이렇게 된 것입니다.
+//! 
+//! 1. 기본 변환
+//! 
+//! 기본 변환은, 위에서 설명한 27,848개의 한자코드에 대해 한글로 변환하는 것입니다. 
+//! 
+//! 변환 하려는 문장에서 문자 하나하나를 읽어서, 해당 문자가 한자이면, 한글로 변환합니다.
+//! 
+//! 이때 이용되는 것이 'hanja_char.csv' 파일입니다. 이 파일에는 한자와 한글로 변환된 문자가 콤마로 구분되어 저장되어 있습니다.
+//! 
+//! 2. 두음법칙
+//! 
+//! 두음법칙은 '녀, 뇨, 뉴, 니'가 단어 첫머리에 올 때, '여, 요, 유, 이'로 발음을 바꾸는 것을 말합니다.
+//! 
+//! 예를 들어, '녀자'는 '여자'로 읽어야 합니다.
+//! 
+//! 한자 단어를 한글로 변환 했을 때, 위 두음법칙에 해당하는 경우는 단어의 첫 글자를 두음법칙에 맞게 변환해야합니다. 
+//! 
+//! 여기서, 알고리즘을 짜는 입장에서는 고민을 하게됩니다.  
+//! 각 문자를 음소로 분리해서 두음법칙에 해당하는 지를 판단하게 할지, 아니면 두음법칙에 해당하는 모든 문자를 미리 매핑해 놓고 변환하게 할지 고민이 됩니다.
+//! 
+//! 필자는 두 번째 방법을 선택했습니다. 두음법칙에 해당하는 문자가 모두 해봐야 52개이기 때문입니다.
+//! 이 52개 문자가 들어 있는 것이 dueum.csv 파일입니다.
+//! 
+//! 알고리즘에서는, 한자 단어를 한글로 변환하고 나서, 두음법칙에 해당하는 문자가 단어의 첫 글자에 있으면, 그 문자를 두음법칙에 맞게 변환합니다.
+//! 
+//! 3. 불규칙 변환
+//! 
+//! 두음법칙에 의한 불규칙 말고도, 기본 변환에 의해 해결이 안되는 불규칙 변환들이 있습니다. 
+//! 
+//! '동음이자'에 의한 불규칙 변환, 사이시옷 규칙에 의한 불규칙 변환 등이 있는데, 이러한 불규칙 변환들은 'hanja_word.csv' 파일에 매핑되어 있습니다.
+//! 
+//! 알고리즘에서는, 한자 단어가 있고, 이 한자 단어가 'hanja_word.csv' 파일에 있으면, 해당 단어를 매핑된 한글로 변환합니다.
+//! 
+//! 실제 알고리즘에서는 이 불규칙변환이 제일 먼저 일어나고, 그 다음에 '기본변환' 그리고 그 다음에 '두음법칙' 변환이 일어납니다.
+//! 
+//! 실제 코드는 'chi2kor_str' 함수에서 확인할 수 있습니다. 이 함수가 실제 변환을 수행하는 핵심 함수입니다.
+//! 
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -86,9 +176,19 @@ use std::io::{BufRead, BufReader};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 const KO_START:u32 = 44032;
-const KO_END:u32 = 55184;
-const CHI_START:u32 = 13312;
-const CHI_END:u32 = 64041;
+const KO_END:u32 = 55203;
+
+const CHI_S1:u32 = 13312;
+const CHI_E1:u32 = 19903;
+
+const CHI_S2:u32 = 19968;
+const CHI_E2:u32 = 40959;
+
+const CHI_S3:u32 = 63744;
+const CHI_E3:u32 = 64045;
+
+const CHI_S4:u32 = 64048;
+const CHI_E4:u32 = 64109;
 
 /// Load dictionary files and return the dictionary component as a tuple containing three HashMaps.
 /// The tuple contains the following HashMaps: (hanja_dic, dueum_dic, word_dic)
@@ -363,7 +463,9 @@ fn generate_dic_str(file_path:&str) -> Result<HashMap<String, String>, Box<dyn E
 // whether c is (korean or chinese character) or not
 fn is_kor_or_chi(c:&char) -> bool {
     let n = *c as u32;
-    if (n >= KO_START && n <= KO_END) || (n >= CHI_START && n <= CHI_END){
+    if (n >= KO_START && n <= KO_END) || 
+       ( (n >= CHI_S1 && n <= CHI_E1) || (n >= CHI_S2 && n <= CHI_E2) || 
+         (n >= CHI_S3 && n <= CHI_E3) || (n >= CHI_S4 && n <= CHI_E4)) {
         true
     }else {
         false
@@ -374,8 +476,10 @@ fn is_kor_or_chi(c:&char) -> bool {
 // whether c is chinese character or not
 fn is_chi(c:&char) -> bool {
     let n = *c as u32;
-    if n >= CHI_START && n <= CHI_END{ true }
-    else { false }  
+    if  (n >= CHI_S1 && n <= CHI_E1) || (n >= CHI_S2 && n <= CHI_E2) || 
+        (n >= CHI_S3 && n <= CHI_E3) || (n >= CHI_S4 && n <= CHI_E4) { 
+        true 
+    }else { false }  
 }
 
 
