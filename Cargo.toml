@@ -1,6 +1,6 @@
 [package]
 name = "hanja_hangul"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Jeff(Heejin Park) <p14jeffwest@gmail.com>"]
 edition = "2021"
 description = "A Library that converts Chinese characters to Korean characters. That is, convert hanja to hangul"
