@@ -4,11 +4,14 @@
 //! 
 //! The library provides the following functions:
 //! 
-//! * load_dictionary - Load dictionary files and return the dictionary component as a tuple containing three HashMaps.
+//! * load_dictionary - Load dictionary from the hard-coded dictionary data and return the dictionary component as a tuple containing three HashMaps.
+//! * load_dictionary_from_file - Load dictionary files and return the dictionary component as a tuple containing three HashMaps.
 //! * chi2kor_file - Convert Chinese characters in the input file to Korean characters and write the result to the output file.
 //! * chi2kor_str - Convert Chinese characters in the input string to Korean characters.
 //! 
-//! The dictionary files should be exist in the same directory as the executable file.
+//! The load_dictionary function does not require any csv files to be passed as arguments while the 'load_dictionary_from_file' function does. 
+//! 
+//! When using the 'load_dictionary_from_file' function, the dictionary files path should be supplied as arguments.
 //! The dictionary files can be downloaded from the following URLs:
 //! * hanja_char.csv - [Download](https://github.com/p14jeffwest/hanja_hangul/blob/main/hanja_char.csv)
 //! * dueum.csv - [Download](https://github.com/p14jeffwest/hanja_hangul/blob/main/dueum.csv)
@@ -18,15 +21,25 @@
 //! 
 //! ```
 //! use hanja_hangul as h2h;
-//! 
-//! use std::collections::HashMap;
 //! use std::error::Error;
+//! use std::path::Path;
+//! 
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     // 1. test with load_dictionary which uses the hardcoded dictionary.
 //!     let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary()?;
-//!     h2h::chi2kor_file("123.txt", "", &char_dic, &dueum_dic, &word_dic).await?;
+//!     h2h::chi2kor_file("sample.txt", "sample_hangul1.txt", &char_dic, &dueum_dic, &word_dic).await?;
+//! 
+//!     //2. test with load_dictionary_from_file which loads the dictionary from a file.
+//!     let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary_from_file(
+//!         Path::new("hanja_char.csv"),
+//!         Path::new("dueum.csv"),
+//!         Path::new("hanja_word.csv")
+//!     )?;
+//!     h2h::chi2kor_file("sample.txt", "sample_hangul2.txt", &char_dic, &dueum_dic, &word_dic).await?;
 //!     Ok(())
 //! }
+//!  
 //! ```
 //! 
 //! if the output_file is not supplied, the function will create a new file attached with "(한글화)" to the input file name.
@@ -41,7 +54,7 @@
 //! 
 //! ```
 //! [dependencies]
-//! hanja_hangul = "0.1.0"
+//! hanja_hangul = "0.1.3"
 //! tokio = { version = "1", features = ["full"] }
 //! ```
 //! 
@@ -57,22 +70,31 @@
 //! hanja_hangul는 한글로 변환하는 라이브러리입니다.
 //! 
 //! 한자로된 문자는 한글로 변환할 수 있습니다. 따라서, 각 한자 별로 한글로 어떻게 읽으면 될지를 매핑하는 사전을 만들 수 있습니다.
-//! 이렇게 만든 사전이 hanja_char.csv 파일입니다. 여기에는 한자와 한글로 변환된 문자가 콤마로 구분되어 저장되어 있습니다.
 //! 
 //! 그런데, 이와 같이 각각의 한자를 한글로 변환했을 때, 맞지 않는 경우가 있습니다. 
 //! 예를 들어 '女子'라는 한자는 '녀자'로 변환되겠지만 실제로는 '여자'로 읽어야 합니다. 
 //! 이러한 것을 '두음법칙'이라고 하는데, '녀, 뇨, 뉴, 니'가 단어 첫머리에 올 때, '여, 요, 유, 이'로 발음을 바꾸는 것을 말합니다.
-//! 이러한 두음법칙이 적용되는 첫 글자를 매핑한 것이 dueum.csv 파일입니다.
 //! 
 //! 두음법칙만으로 해결되지 않는 경우도 있습니다. 
 //! 대표적인 예가 '동음이자'입니다. '동음이자'란 한자가 여러 개의 음을 가질 때, 그 중에서 어떤 음으로 읽어야 할지를 말합니다.
 //! 예를 들어 '車'라는 한자는 '차'로 읽을 수도 있고 '거'로 읽을 수도 있습니다. 'hanja_char.csv' 파일에는 '거'로 변환되게 되어 있습니다.
 //! 따라서, '客車'라는 한자 단어에 대해서 'hanja_char.csv'에 의한 규칙으로는 '객거'로 변환되지만, 실제로는 '객차'로 읽어야 합니다.
-//! 이러한 경우를 해결하기 위해 'hanja_word.csv' 파일에, '동음이자'의 경우 원래의 규칙과 다르게 변환되어야 하는 단어를 매핑해 놓았습니다.
+//! 이러한 경우를 해결하기 위해 '동음이자'의 경우 원래의 규칙과 다르게 변환되어야 하는 단어를 매핑해 놓았습니다.
 //! 
-//! 또한, 'hanja_word.csv' 파일에는 다른 불규칙한 변환이 필요한 단어들도 매핑되어 있습니다.
+//! 또한, 다른 불규칙한 변환이 필요한 단어들도 매핑되어 있습니다.
 //! 예를 들어, '庫間'이라는 단어는 '고간'으로 변환되지만, 실제로는 '곳간'이라고 읽어야 합니다. 
-//! 이러한 불규칙한 변환이 일어나는 단어들을 'hanja_word.csv' 파일에 매핑해 놓았습니다.
+//! 이러한 불규칙한 변환이 일어나는 단어들을 모두 매핑해 놓았습니다.
+//! 
+//! 이렇게 미리 만들어 놓은 사전은 load_dictionary() 함수를 호출하면 로드됩니다.
+//! 
+//! 그런데 만약, 이 라이브러리에 내장된 사전을 이용하지 않고, 자신이 만든 사전을 이용하고 싶다면,
+//! load_dictionary_from_file() 함수를 사용하면 됩니다.
+//! 
+//! 이 함수는 'hanja_char.csv', 'dueum.csv', 'hanja_word.csv' 파일을 읽어서 사전을 생성합니다.
+//! 이 3개의 파일에 대해서 아래의 github 주소에서 다운로드 받을 수 있습니다.
+//! 이 파일에다 자신이 원하는 한자와 한글 변환을 추가하면 됩니다.
+//! 
+//!   https://github.com/p14jeffwest/hanja_hangul
 //! 
 //! 'hanja_word.csv' 파일에, 불규칙하게 변환되는 단어들을 가능한 많이 넣어두긴 했는데, 모든 경우를 다 매핑했다고 할 수는 없습니다.
 //! 만약 변환 결과가 맞지 않는 경우, 'hanja_word.csv' 파일에 새로운 매핑을 추가하면 됩니다. 
@@ -81,13 +103,22 @@
 //! 
 //! ```
 //! use hanja_hangul as h2h;
-//! use hanja_hangul as h2h;
 //! use std::error::Error;
-//!
+//! use std::path::Path;
+//! 
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     // 1. test with load_dictionary which uses the hardcoded dictionary.
 //!     let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary()?;
-//!     h2h::chi2kor_file("sample.txt", "sample_hangul.txt", &char_dic, &dueum_dic, &word_dic).await?;
+//!     h2h::chi2kor_file("sample.txt", "sample_hangul1.txt", &char_dic, &dueum_dic, &word_dic).await?;
+//! 
+//!     //2. test with load_dictionary_from_file which loads the dictionary from a file.
+//!     let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary_from_file(
+//!         Path::new("hanja_char.csv"),
+//!         Path::new("dueum.csv"),
+//!         Path::new("hanja_word.csv")
+//!     )?;
+//!     h2h::chi2kor_file("sample.txt", "sample_hangul2.txt", &char_dic, &dueum_dic, &word_dic).await?;
 //!     Ok(())
 //! }
 //! ```
@@ -115,6 +146,7 @@
 //! ```
 //! 
 //! 일반 한자에 대한 한글 변환 및 두음법칙, 동음이자, 사이시옷 규칙에 의한 불규칙한 한글변환도 잘 되고 있음을 알 수 있습니다. 
+//! 
 //! 
 //! # Note
 //! 한자를 한글로 변환할 때 사용된 방법을 소개하겠습니다.
@@ -168,10 +200,16 @@
 //! 실제 코드는 'chi2kor_str' 함수에서 확인할 수 있습니다. 이 함수가 실제 변환을 수행하는 핵심 함수입니다.
 //! 
 
+mod dueum;
+mod hanja_char;
+mod hanja_word;
+
+use std::char;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::path::Path;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -199,14 +237,52 @@ const CHI_E4:u32 = 64109;
 ///
 /// The HashMaps should be sent as arguments to the chi2kor function.
 /// 
-/// The dictionary files should be exist in the same directory as the executable file.
-/// The dictionary files should be named as follows:
+/// The dictionary files path should be supplied as arguments.
+/// The dictionary files path should be matched with the following files:
 ///   * hanja_char.csv - A CSV file that contains the mapping of Chinese characters to Korean characters.
 ///   * dueum.csv - A CSV file that contains the mapping of Korean characters to Korean characters according to the dueum law.
 ///   * hanja_word.csv - A CSV file that contains the mapping of Chinese words to Korean words.
 ///  
 /// # Errors
 /// If the function fails to open the dictionary files, it will return an error.
+/// 
+/// # Examples
+/// ```
+/// use hanja_hangul as h2h;
+/// use std::collections::HashMap;
+/// use std::error::Error;
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn Error>> { 
+///   let (hanja_dic, dueum_dic, word_dic) = h2h::load_dictionary("hanja_char.csv","dueum.csv", "hanja_word.csv")?;
+///   h2h::chi2kor_file("123.txt", "", &hanja_dic, &dueum_dic, &dongum_dic).await?;
+///   Ok(())
+/// }
+/// ```
+/// 
+pub fn load_dictionary_from_file(hanja_char_path:&Path, dueum_path:&Path, hanja_word_path:&Path) 
+        -> Result<(HashMap<char, char>, HashMap<char, char>, HashMap<String, String>), Box<dyn Error>> {
+    let char_dic = generate_dic_char(hanja_char_path).map_err(|_| "open hanja_char.csv file was failed.")?;
+    let dueum_dic = generate_dic_char(dueum_path).map_err(|_| "open dueum.csv file was failed.")?;
+    let word_dic = generate_dic_str(hanja_word_path).map_err(|_| "open hanja_word.csv file was failed.")?;
+    Ok((char_dic, dueum_dic, word_dic))
+}
+
+
+/// Load dictionary data and return the dictionary component as a tuple containing three HashMaps.
+/// The tuple contains the following HashMaps: (hanja_dic, dueum_dic, word_dic)
+/// 
+/// hanja_dic: HashMap<char, char> - A dictionary that maps Chinese characters to Korean characters.
+/// dueum_dic: HashMap<char, char> - A dictionary that maps Korean characters to Korean characters according to the dueum law.  
+/// word_dic: HashMap<String, String> - A dictionary that maps Chinese words to Korean words especially for words that beyond the regular conversion rules.
+///
+/// The HashMaps should be sent as arguments to the chi2kor function.
+///    
+/// This function does not require any csv files to be passed as arguments while the 'load_dictionary_from_file' function does.
+/// It uses the hard-coded dictionary data instead of reading from files.
+/// So, it can be used without any external files.
+/// 
+/// # Errors
+/// If the function fails to read the dictionary data, it will return an error.
 /// 
 /// # Examples
 /// ```
@@ -223,9 +299,56 @@ const CHI_E4:u32 = 64109;
 /// 
 pub fn load_dictionary() 
         -> Result<(HashMap<char, char>, HashMap<char, char>, HashMap<String, String>), Box<dyn Error>> {
-    let char_dic = generate_dic_char("hanja_char.csv").map_err(|_| "open hanja_char.csv file was failed.")?;
-    let dueum_dic = generate_dic_char("dueum.csv").map_err(|_| "open dueum.csv file was failed.")?;
-    let word_dic = generate_dic_str("hanja_word.csv").map_err(|_| "open hanja_word.csv file was failed.")?;
+    
+    //1. 기본한자 변환 사전
+    let char_dic = hanja_char::HANJA_BASIC.lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split(',').collect();
+            if parts.len() == 2 {
+                let key_char = parts[0].trim().chars().next().unwrap();
+                let val_char = parts[1].trim().chars().next().unwrap();
+                Some((key_char, val_char))
+            } else {
+                None
+            }
+        })
+        .collect::<HashMap<char, char>>();
+
+
+    //2. 두음법칙 사전
+    //dueum::DUEUM은 ("냥,양\n") 형태의 여러 라인으로 구성되어 있다. 
+    //모든 라인을 읽고, 각 라인 별로 콤마를 기준으로 split하여, 앞 문자와 뒤 문자를 각각 key와 value로 설정한다.
+    //이때, key와 value는 모두 char로 변환하여 저장한다.
+    let dueum_dic = dueum::DUEUM.lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split(',').collect();
+            if parts.len() == 2 {
+                let key_char = parts[0].trim().chars().next().unwrap();
+                let val_char = parts[1].trim().chars().next().unwrap();
+                Some((key_char, val_char))
+            } else {
+                None
+            }
+        })
+        .collect::<HashMap<char, char>>();
+
+    //3. 불규칙 변환 한자사전
+    // hanja_word::HANJA_SPECIAL은 ("女子,여자\n") 형태의 여러 라인으로 구성되어 있다.
+    //모든 라인을 읽고, 각 라인 별로 콤마를 기준으로 split하여, 앞 문자와 뒤 문자를 각각 key와 value로 설정한다.
+    //이때, key와 value는 모두 String으로 변환하여 저장한다.
+    let word_dic = hanja_word::HANJA_SPECIAL.lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split(',').collect();
+            if parts.len() == 2 {
+                let key_str = parts[0].trim().to_string();
+                let val_str = parts[1].trim().to_string();
+                Some((key_str, val_str))
+            } else {
+                None
+            }
+        })
+        .collect::<HashMap<String, String>>();  
+
     Ok((char_dic, dueum_dic, word_dic))
 }
 
@@ -402,6 +525,9 @@ pub fn chi2kor_str(
 }    
 
 
+
+
+
 /// Convert the contents of the input file to a HashMap that contains "character, character" format data.
 ///
 /// # Arguments
@@ -413,7 +539,7 @@ pub fn chi2kor_str(
 /// # Errors
 /// If the function fails to open the input file, it will return an error.
 /// 
-fn generate_dic_char(file_path:&str) -> Result<HashMap<char, char>, Box<dyn Error>> {
+fn generate_dic_char(file_path:&Path) -> Result<HashMap<char, char>, Box<dyn Error>> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
     let mut dic: HashMap<char, char> = HashMap::new();
@@ -431,6 +557,7 @@ fn generate_dic_char(file_path:&str) -> Result<HashMap<char, char>, Box<dyn Erro
 }
 
 
+
 /// Convert the contents of the input file to a HashMap that contains "string, string" format data.
 /// 
 /// # Arguments
@@ -442,7 +569,7 @@ fn generate_dic_char(file_path:&str) -> Result<HashMap<char, char>, Box<dyn Erro
 /// # Errors
 /// If the function fails to open the input file, it will return an error.
 /// 
-fn generate_dic_str(file_path:&str) -> Result<HashMap<String, String>, Box<dyn Error>> {
+fn generate_dic_str(file_path:&Path) -> Result<HashMap<String, String>, Box<dyn Error>> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
     let mut dic: HashMap<String, String> = HashMap::new();
