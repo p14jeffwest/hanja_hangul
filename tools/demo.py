@@ -21,6 +21,32 @@ cv = Converter(prim, dueum, words, dwords=rd('data/dueum_words.txt'), w2=rd('dat
 SB = rd('data/surname_block.txt'); SUR = {'金': '김', '沈': '심', '葉': '섭', '契': '글', '單': '선'}
 NB = rd('data/name_block.txt')
 NAME_SUR = set('金李朴崔鄭姜趙尹張林韓吳徐申權黃安宋柳洪全高文孫梁裵白曺許劉南沈盧河丁成郭車兪具禹朱任羅辛閔陳池嚴蔡元千方孔玄咸卞楊廉邊呂秋魯都蘇愼石宣薛馬吉周延表明魏潘王琴玉陸印孟諸卓秦慶睦太奇殷片龍芮邢偰鞠陰甘')
+import collections as _c
+ALTS = _c.defaultdict(set)
+for _l in open('data/alts_nikl.csv', encoding='utf-8'):
+    if not _l.startswith('#'):
+        _k, _v = _l.rstrip('\n').split(',', 1); ALTS[_k].update(_v.split())
+_, _compat_alts = load_chars(R + 'hanja_char.csv')
+for _k, _v in _compat_alts.items(): ALTS[_k].update(_v)
+def explains(run, given):
+    if len(run) != len(given): return False
+    for h, g in zip(run, given):
+        p = prim.get(h)
+        if p is None: return False
+        rs = {p} | (ALTS[h] - {p})
+        if not any(r == g or cv.du(r) == g for r in rs): return False
+    return True
+SYL = lambda c: 0xAC00 <= ord(c) <= 0xD7A3
+def gloss_ctx(text, i, j):
+    n = j - i; L = len(text)
+    closes = lambda k: k == L or text[k] in ')·,/'
+    before = text[i-1-n:i-1] if (i > n and text[i-1] == '(' and closes(j) and all(SYL(c) for c in text[i-1-n:i-1])) else None
+    after = text[j+1:j+1+n] if (j + 1 + n <= L and j < L and text[j] == '(' and closes(j+1+n) and all(SYL(c) for c in text[j+1:j+1+n])) else None
+    given = before or after
+    if given is None: return None
+    if explains(nfc(text[i:j]), given): return given
+    if before is not None: return text[i:j]
+    return None
 def convert(text):
     out, i, n = [], 0, len(text)
     while i < n:
@@ -28,6 +54,9 @@ def convert(text):
             out.append(text[i]); i += 1; continue
         j = i
         while j < n and is_hanja(text[j]): j += 1
+        g = gloss_ctx(text, i, j)
+        if g is not None:
+            out.append(g); i = j; continue
         span = nfc(text[i:j])
         ws = not (i > 0 and (text[i - 1].isdigit() or 0xAC00 <= ord(text[i - 1]) <= 0xD7A3))   # 숫자·한글 바로 뒤는 첫머리 아님
         r = cv.reading(span, ws)

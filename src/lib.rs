@@ -31,6 +31,8 @@
 //!    (金泳三 김영삼, 金대통령 김대통령). 흔한 성 한자 + 두 글자 이름이면 이름 첫 음절에 두음
 //!    (李龍俊 이용준, 金令培 김영배). 연쇄 전체가 예외표에 있으면 예외표가 이긴다.
 //!    [`Options::surname`] 으로 끈다.
+//! 8. **괄호 병기** — `윤종용(尹鍾龍)`·`林昌烈(임창열)` 처럼 글쓴이가 단 한글이 그 한자의 독음으로 설명되면
+//!    그 한글로 읽고, `도쿄(東京)`·`히로시(三塚博)` 처럼 설명되지 않으면 외국어 표기로 보고 한자를 그대로 둔다. [`Options::gloss`] 로 끈다.
 //!
 //! 사전 표제어로 잰 정확도와 자료 출처는 README 를 보라.
 
@@ -60,11 +62,14 @@ pub struct Options {
     pub style: Style,
     /// 인명 규칙: 성씨(金泳三 김영삼)와 이름 첫 음절 두음(李龍俊 이용준). 끄면 金 은 늘 금.
     pub surname: bool,
+    /// 괄호 병기 문맥: `윤종용(尹鍾龍)`·`林昌烈(임창열)` 처럼 글쓴이가 단 한글이 그 한자의 독음으로
+    /// 설명되면 그 한글로 읽고, `도쿄(東京)`·`히로시(三塚博)` 처럼 설명되지 않으면(외국어 표기) 한자를 그대로 둔다.
+    pub gloss: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Options { style: Style::Hangul, surname: true }
+        Options { style: Style::Hangul, surname: true, gloss: true }
     }
 }
 
@@ -109,8 +114,9 @@ impl Converter {
         self.opts
     }
 
-    /// 예외 단어를 더한다 (내장 표보다 우선). 독음에 `거란(글안)` 처럼 괄호를 쓰면
-    /// [`convert`](Self::convert) 는 그대로 내고, [`reading`](Self::reading) 은 괄호 앞을 쓴다.
+    /// 예외 단어를 더한다 (내장 표보다 우선). 독음에 `거란(글안)` 이나 `차례/다례` 처럼 병기하면
+    /// [`convert`](Self::convert) 는 그대로 내고, [`reading`](Self::reading) 은 앞쪽을,
+    /// [`readings`](Self::readings) 는 둘 다 낸다.
     pub fn add_word(&mut self, hanja: &str, hangul: &str) {
         let k = self.t.fold_str(hanja);
         self.t.max_word = self.t.max_word.max(k.len());
@@ -142,10 +148,69 @@ impl Converter {
             }
             // 연쇄 첫머리: 앞이 숫자나 한글 음절이면 아니다
             let word_start = i == 0 || !(cs[i - 1].is_ascii_digit() || is_syllable(cs[i - 1]));
-            self.convert_run(&cs[i..j], word_start, &mut out);
+            if !(self.opts.gloss && self.convert_glossed(&cs, i, j, &mut out)) {
+                self.convert_run(&cs[i..j], word_start, &mut out);
+            }
             i = j;
         }
         Cow::Owned(out)
+    }
+
+    /// 괄호 병기 문맥이면 처리하고 true. `한글(漢字)` 또는 `漢字(한글)` 에서 한글이 한자와 글자 수가 같을 때:
+    /// 한글이 글자마다 그 한자의 독음(대표·다른 독음·두음 꼴)이면 그 한글을 독음으로 쓰고,
+    /// `한글(漢字)` 인데 독음으로 설명되지 않으면(도쿄(東京), 히로시(三塚博)) 한자를 그대로 둔다.
+    fn convert_glossed(&self, cs: &[char], i: usize, j: usize, out: &mut String) -> bool {
+        let n = j - i;
+        let closes = |k: usize| k == cs.len() || matches!(cs[k], ')' | '·' | ',' | '/');
+        // 한글(漢字): 연쇄 앞이 '(' 이고 그 앞 n 글자가 한글 음절
+        let before = (i > n && cs[i - 1] == '(' && closes(j) && cs[i - 1 - n..i - 1].iter().all(|&c| is_syllable(c)))
+            .then(|| &cs[i - 1 - n..i - 1]);
+        // 漢字(한글): 연쇄 뒤가 '(' 이고 그다음 n 글자가 한글 음절
+        let after = (j + 1 + n <= cs.len() && j < cs.len() && cs[j] == '(' && closes(j + 1 + n)
+            && cs[j + 1..j + 1 + n].iter().all(|&c| is_syllable(c)))
+            .then(|| &cs[j + 1..j + 1 + n]);
+        let Some(given) = before.or(after) else { return false };
+        let run = &cs[i..j];
+        if self.explains(run, given) {
+            let reading: String = given.iter().collect();
+            let original: String = run.iter().collect();
+            self.emit(&reading, &original, out);
+            true
+        } else if before.is_some() {
+            out.extend(run.iter());      // 외국어 표기의 한자: 그대로
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 한글 `given` 이 글자마다 한자 `run` 의 독음으로 설명되는가
+    fn explains(&self, run: &[char], given: &[char]) -> bool {
+        run.len() == given.len()
+            && run.iter().zip(given).all(|(&h, &g)| {
+                let h = self.t.fold(h);
+                let Some(&p) = self.t.prim.get(&h) else { return false };
+                let alts = self.t.alts.get(&h).map(Vec::as_slice).unwrap_or(&[]);
+                std::iter::once(p).chain(alts.iter().copied()).any(|r| r == g || self.du(r) == g)
+            })
+    }
+
+    fn emit(&self, reading: &str, original: &str, out: &mut String) {
+        match self.opts.style {
+            Style::Hangul => out.push_str(reading),
+            Style::HangulHanja => {
+                out.push_str(reading);
+                out.push('(');
+                out.push_str(original);
+                out.push(')');
+            }
+            Style::HanjaHangul => {
+                out.push_str(original);
+                out.push('(');
+                out.push_str(reading);
+                out.push(')');
+            }
+        }
     }
 
     /// 한자 연쇄 하나. 글자표에 없는 글자가 있으면 그 글자는 그대로 두고 앞뒤를 따로 읽는다.
@@ -166,21 +231,7 @@ impl Converter {
             }
             let reading = self.read_with_surname(&folded[s..e], ws, true).unwrap_or_default();
             let original: String = run[s..e].iter().collect();
-            match self.opts.style {
-                Style::Hangul => out.push_str(&reading),
-                Style::HangulHanja => {
-                    out.push_str(&reading);
-                    out.push('(');
-                    out.push_str(&original);
-                    out.push(')');
-                }
-                Style::HanjaHangul => {
-                    out.push_str(&original);
-                    out.push('(');
-                    out.push_str(&reading);
-                    out.push(')');
-                }
-            }
+            self.emit(&reading, &original, out);
             s = e;
             ws = false;
         }
@@ -417,9 +468,9 @@ struct Piece {
     dueum: bool,
 }
 
-/// `거란(글안)` → (`거란`, Some(`글안`))
+/// 손 표의 병기: `거란(글안)` → (`거란`, Some(`글안`)), `차례/다례` → (`차례`, Some(`다례`))
 fn split_gloss(v: &[char]) -> (Vec<char>, Option<Vec<char>>) {
-    match v.iter().position(|&c| c == '(') {
+    match v.iter().position(|&c| c == '(' || c == '/') {
         Some(p) => {
             let g: Vec<char> = v[p + 1..].iter().copied().filter(|&c| c != ')').collect();
             (v[..p].to_vec(), if g.is_empty() { None } else { Some(g) })

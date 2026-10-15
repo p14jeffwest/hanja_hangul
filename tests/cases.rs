@@ -77,9 +77,9 @@ fn readings_contract() {
 
 #[test]
 fn styles_and_passthrough() {
-    let c = Converter::new().with_options(Options { style: Style::HangulHanja, surname: true });
+    let c = Converter::new().with_options(Options { style: Style::HangulHanja, ..Options::default() });
     assert_eq!(c.convert("經濟 발전"), "경제(經濟) 발전");
-    let c = Converter::new().with_options(Options { style: Style::HanjaHangul, surname: true });
+    let c = Converter::new().with_options(Options { style: Style::HanjaHangul, ..Options::default() });
     assert_eq!(c.convert("經濟 발전"), "經濟(경제) 발전");
     assert!(matches!(Converter::global().convert("한자 없음"), Cow::Borrowed(_)));
 }
@@ -103,4 +103,27 @@ fn unknown_char_kept() {
 fn sample_news() {
     let s = "「宋寅壽기자」14일 농림해양수산위의 농협 국감에선 \n客車, 六月, 庫間, 女子\n金泳鎭(국민회의) 韓灝鮮(자민련) 權五乙의원(민주당)은";
     assert_eq!(conv(s), "「송인수기자」14일 농림해양수산위의 농협 국감에선 \n객차, 유월, 곳간, 여자\n김영진(국민회의) 한호선(자민련) 권오을의원(민주당)은");
+}
+
+#[test]
+fn parenthetical_gloss() {
+    // 글쓴이가 단 한글이 독음으로 설명되면 그 한글로 (이름 끝 글자처럼 규칙으로 못 맞히는 것)
+    assert_eq!(conv("윤종용(尹鍾龍)사장"), "윤종용(윤종용)사장");
+    assert_eq!(conv("林昌烈(임창열)부총리"), "임창열(임창열)부총리");
+    assert_eq!(conv("김종필(金鍾泌)총재"), "김종필(김종필)총재");
+    // 설명되지 않으면 외국어 표기 → 한자 그대로
+    assert_eq!(conv("히로시(三塚博)대장상, 도쿄(東京)에서, 베이징(北京)"), "히로시(三塚博)대장상, 도쿄(東京)에서, 베이징(北京)");
+    // 글자 수가 다르면 문맥이 아니다
+    assert_eq!(conv("金泳鎭(국민회의)"), "김영진(국민회의)");
+    let off = Converter::new().with_options(Options { gloss: false, ..Options::default() });
+    assert_eq!(off.convert("도쿄(東京)"), "도쿄(동경)");
+}
+
+#[test]
+fn slash_gloss() {
+    // 茶禮: 제사는 차례, 차 예절은 다례 — 문맥 없이 못 고르므로 병기 (Jeff 10.15)
+    let c = Converter::global();
+    assert_eq!(c.convert("茶禮"), "차례/다례");
+    assert_eq!(c.reading("茶禮", true).as_deref(), Some("차례"));
+    assert_eq!(c.readings("茶禮", true, 4), vec!["차례".to_string(), "다례".to_string()]);
 }

@@ -80,7 +80,9 @@ hanja2hangul --no-surname < 입력.txt
 4. **렬·률** — 모음·ㄴ 받침 뒤에서 열·율(分裂 분열, 比率 비율).
 5. **不** — ㄷ·ㅈ 앞에서 부, 그 밖에는 불(不當 부당, 不法 불법).
 6. **인명** — 金·沈·葉·契·單 으로 시작하는 연쇄가 보통 낱말(金額 금액, 沈默 침묵)이 아니면 성씨 독음(金泳三 김영삼, 金대통령 김대통령). 李·盧·柳·林 은 두음법칙이 맡는다. 흔한 성 한자 + 두 글자 이름이면 이름 첫 음절에도 두음(李龍俊 이용준, 金令培 김영배, 權魯甲 권노갑) — 사전 3자어(全羅道 전라도)나 앞 두 글자가 사전 2자어(權力化)인 것은 빼고. 연쇄 전체가 예외표에 있으면 예외표가 이긴다(金龍煥 김용환).
-7. **호환 한자**(U+F900~)는 통합 한자로 접어 읽는다. 표에 없는 한자는 그대로 둔다.
+7. **괄호 병기** — `윤종용(尹鍾龍)`, `林昌烈(임창열)` 처럼 글쓴이가 단 한글이 그 한자의 독음으로 설명되면 그 한글로 읽는다(이름 끝 글자는 사람마다 달라 규칙으로 못 맞힌다: 임창열 / 최병렬). `도쿄(東京)`, `히로시(三塚博)` 처럼 설명되지 않으면 외국어 표기로 보고 한자를 그대로 둔다. `Options::gloss` 로 끈다.
+8. **호환 한자**(U+F900~)는 통합 한자로 접어 읽는다. 표에 없는 한자는 그대로 둔다.
+9. 손 표의 병기 — 문맥 없이 못 고르는 말은 둘 다 적는다: 契丹 → 거란(글안), 茶禮 → 차례/다례.
 
 ## 자료
 
@@ -103,7 +105,7 @@ hanja2hangul --no-surname < 입력.txt
 
 ## 라이선스
 
-- 코드와 지은이 자료(`hanja_char.csv`, `dueum.csv`, `hanja_word.csv`): MIT OR Apache-2.0.
+- 코드와 지은이 자료(`hanja_char.csv`, `dueum.csv`, `hanja_word.csv`): MIT (`LICENSE`).
 - `data/` 의 국립국어원 사전 파생 표: **CC BY-SA 2.0 KR**. 출처 —
   국립국어원 《표준국어대사전》(https://stdict.korean.go.kr), 《우리말샘》(https://opendict.korean.go.kr).
   이 표들을 고쳐 다시 배포하면 같은 조건(CC BY-SA)을 따른다.
@@ -135,5 +137,5 @@ On 259,680 hanja–hangul parenthetical glosses from Korean newspapers (about ha
 it reads 98.8% correctly.
 About 10 million characters per second on one core.
 
-Code: MIT OR Apache-2.0. Tables in `data/` are derived from the NIKL Standard Korean Dictionary and
+Code: MIT. Tables in `data/` are derived from the NIKL Standard Korean Dictionary and
 Urimalsaem and are licensed CC BY-SA 2.0 KR; disable the default `nikl` feature to leave them out.
