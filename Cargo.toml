@@ -1,15 +1,28 @@
 [package]
 name = "hanja_hangul"
-version = "0.1.3"
+version = "0.2.0"
 authors = ["Jeff(Heejin Park) <p14jeffwest@gmail.com>"]
 edition = "2021"
-description = "A Library that converts Chinese characters to Korean characters. That is, convert hanja to hangul"
-keywords = ["hanja", "hangul", "hanaja2hangul"]
+rust-version = "1.80"
+description = "Converts hanja (Chinese characters) in Korean text to hangul, using exception tables derived from the NIKL Standard Korean Dictionary and Urimalsaem"
+keywords = ["hanja", "hangul", "korean", "transliteration"]
+categories = ["text-processing", "localization"]
 license = "MIT OR Apache-2.0"
-include = ["src/lib.rs", "Cargo.toml", "hanja_char.rs", "dueum.rs", "hanja_word.rs", "sample.txt"]
 readme = "README.md"
 repository = "https://github.com/p14jeffwest/hanja_hangul"
+include = ["src/**", "data/*.csv", "data/*.txt", "hanja_char.csv", "dueum.csv", "hanja_word.csv", "README.md", "LICENSE*", "Cargo.toml"]
 
+[features]
+default = ["nikl"]
+# 국립국어원 사전(CC BY-SA 2.0 KR)에서 만든 표 넷(예외표·합성어 두음·두음 막기·성씨 막기)을 싣는다.
+# 끄면 Jeff 손 자료(글자표·두음·손 예외표 135행)만 쓴다.
+nikl = []
+
+[[bin]]
+name = "hanja2hangul"
+path = "src/main.rs"
 
 [dependencies]
-tokio = { version = "1.44.0", features = ["full"] }
+
+[profile.release]
+lto = true

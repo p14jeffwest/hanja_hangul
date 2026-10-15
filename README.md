@@ -1,216 +1,125 @@
-# Hanja to Hangul
+# hanja_hangul
 
-`hanja_hangul` is a library that converts Chinese characters to Korean characters.
+한자가 섞인 한국어 글의 한자를 한글 독음으로 바꾸는 Rust 라이브러리와 명령줄 도구.
+의존 크레이트가 없고 자료는 모두 내장되어 있다.
 
-## Features
-
-The library provides the following functions:
-
-- `load_dictionary` - Load dictionary from the hard-coded data and return the dictionary component as a tuple containing three HashMaps.
-- `load_dictionary_from_file` - Load dictionary from the files and return the dictionary component as a tuple containing three HashMaps.
-- `chi2kor_file` - Convert Chinese characters in the input file to Korean characters and write the result to the output file.
-- `chi2kor_str` - Convert Chinese characters in the input string to Korean characters.
-
-## Dictionary Files
-
-The dictionary files are required for the `load_dictionary_from_file` function and should be placed in the same directory as the executable file. These files can be downloaded from the following URLs:
-
-- `hanja_char.csv` - Contains the mapping of Chinese characters to Korean characters. [Download](https://github.com/p14jeffwest/hanja_hangul/blob/main/hanja_char.csv)
-- `dueum.csv` - Contains the mapping of Korean characters to Korean characters according to the dueum law. [Download](https://github.com/p14jeffwest/hanja_hangul/blob/main/dueum.csv)
-- `hanja_word.csv` - Contains the mapping of Chinese words to Korean words, especially for words that require irregular conversion. [Download](https://github.com/p14jeffwest/hanja_hangul/blob/main/hanja_word.csv)
-
-If you want to use your custom dictionary files, you can modify these CSV files by adding new mappings. For example:
-
-- Add new Chinese-to-Korean character mappings in `hanja_char.csv`.
-- Add new dueum law mappings in `dueum.csv`.
-- Add new irregular word mappings in `hanja_word.csv`.
-
-These files are loaded using the `load_dictionary_from_file` function, which expects the paths to these files as arguments.
-
-## Examples
-
-### Example 1: Using the Hardcoded Dictionary
-
-```rust
-use hanja_hangul as h2h;
-use std::error::Error;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    // Load the hardcoded dictionary
-    let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary()?;
-    
-    // Convert Chinese characters in "sample.txt" to Korean and save to "sample_hangul1.txt"
-    h2h::chi2kor_file("sample.txt", "sample_hangul1.txt", &char_dic, &dueum_dic, &word_dic).await?;
-    Ok(())
-}
+```
+金대통령은 新女性 運動과 經濟理論을 美術評論家에게 說明했다. 1995年度 困難, 綠茶와 茶房.
+→ 김대통령은 신여성 운동과 경제이론을 미술평론가에게 설명했다. 1995년도 곤란, 녹차와 다방.
 ```
 
-### Example 2: Using Custom Dictionary Files
+## 정확도와 속도
 
-```rust
-use hanja_hangul as h2h;
-use std::error::Error;
-use std::path::Path;
+국립국어원 《표준국어대사전》·《우리말샘》의 순한자 표제어 493,043개 가운데 10%를 떼어 두고,
+나머지로 예외표를 만든 뒤 떼어 둔 표제어를 읽혀 잰 값이다(표제어 독음과 같으면 정답).
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    // Load the dictionary from custom CSV files
-    let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary_from_file(
-        Path::new("hanja_char.csv"),
-        Path::new("dueum.csv"),
-        Path::new("hanja_word.csv")
-    )?;
-    
-    // Convert Chinese characters in "sample.txt" to Korean and save to "sample_hangul2.txt"
-    h2h::chi2kor_file("sample.txt", "sample_hangul2.txt", &char_dic, &dueum_dic, &word_dic).await?;
-    Ok(())
-}
-```
+| 변환기 | 떼어 둔 표제어 49,971 | 그중 표준국어대사전 표제어 |
+|---|---|---|
+| 0.1.3 (글자별 + 두음법칙) | 93.43% | 94.88% |
+| **0.2.0** | **98.52%** | **98.21%** |
 
-### Example 3: Handling Missing Output File
+- 예외표는 전체 표제어로 만들어 싣으므로, **사전에 있는 말은 99.99% 맞는다**. 위 98.5%는 사전에 없는 말(신조어·합성어)을 어림한 값이다.
+- 틀리는 것: 사전 밖 인명(金鍾泌 → 김종비), 문맥이 있어야 고를 수 있는 다독음(樂 악/락, 車 차/거, 索 색/삭), 한자 숫자(二〇一六年).
+- 속도: 한자가 절반인 글 558만 자를 0.54초(초당 약 1,000만 자, 단일 스레드). 표 만들기 10~20 ms. 실행 파일 1.2 MB.
 
-If the `output_file` is not supplied, the function will create a new file with "(한글화)" appended to the input file name:
+## 쓰는 법
 
-```rust
-h2h::chi2kor_file("test.txt", "", &char_dic, &dueum_dic, &word_dic).await?;
-```
-
-## Note
-
-The function is an asynchronous function that uses the `tokio` library.
-
-To use this library, add the following to your `Cargo.toml` file:
+### 라이브러리
 
 ```toml
 [dependencies]
-hanja_hangul = "0.1.3"
-tokio = { version = "1", features = ["full"] }
+hanja_hangul = "0.2"
 ```
-
-Or, you can use the following command to add `tokio` to your project:
-
-```sh
-cargo add tokio --features full
-```
-
-## Korean Explanation
-
-`hanja_hangul`는 한글로 변환하는 라이브러리입니다.
-
-한자로된 문자는 한글로 변환할 수 있습니다. 따라서, 각 한자 별로 한글로 어떻게 읽으면 될지를 매핑하는 사전을 만들 수 있습니다. 
-
-그런데, 이와 같이 각각의 한자를 한글로 변환했을 때, 맞지 않는 경우가 있습니다. 예를 들어 '女子'라는 한자는 '녀자'로 변환되겠지만 실제로는 '여자'로 읽어야 합니다. 이러한 것을 '두음법칙'이라고 하는데, '녀, 뇨, 뉴, 니'가 단어 첫머리에 올 때, '여, 요, 유, 이'로 발음을 바꾸는 것을 말합니다. 
-
-두음법칙만으로 해결되지 않는 경우도 있습니다. 대표적인 예가 '동음이자'입니다. '동음이자'란 한자가 여러 개의 음을 가질 때, 그 중에서 어떤 음으로 읽어야 할지를 말합니다. 예를 들어 '車'라는 한자는 '차'로 읽을 수도 있고 '거'로 읽을 수도 있습니다. 기본 변환 사전에는 '거'로 변환되게 되어 있습니다. 따라서, '客車'라는 한자 단어에 대해서 '객거'로 변환되지만, 실제로는 '객차'로 읽어야 합니다. 이러한 경우를 해결하기 위해 불규칙 변환 파일에, '동음이자'의 경우 원래의 규칙과 다르게 변환되어야 하는 단어를 매핑해 놓았습니다.
-
-또한, 다른 불규칙한 변환이 필요한 단어들도 매핑되어 있습니다. 예를 들어, '庫間'이라는 단어는 '고간'으로 변환되지만, 실제로는 '곳간'이라고 읽어야 합니다. 이러한 불규칙한 변환이 일어나는 단어들을 모두 매핑해 놓았습니다.
-
-이렇게 미리 만들어 놓은 사전은 load_dictionary() 함수를 호출하면 로드됩니다.
-
-그런데 만약, 이 라이브러리에 내장된 사전을 이용하지 않고, 자신이 만든 사전을 이용하고 싶다면,
-load_dictionary_from_file() 함수를 사용하면 됩니다.
-
-이 함수는 'hanja_char.csv', 'dueum.csv', 'hanja_word.csv' 파일을 읽어서 사전을 생성합니다.
-이 3개의 파일에 대해서 아래의 github 주소에서 다운로드 받을 수 있습니다.
-'hanja_word.csv' 파일에다 자신이 원하는 한자와 한글 변환을 추가하면 됩니다.
-
-https://github.com/p14jeffwest/hanja_hangul
-
-
-## Example Code
-
-아래 코드는 `hanja_hangul` 라이브러리를 사용하여 `sample.txt` 파일에 있는 한자를 한글로 변환한 후, `sample_hangul.txt` 파일에 저장하는 코드입니다.
 
 ```rust
-use hanja_hangul as h2h;
-use std::error::Error;
-use std::path::Path;
+use hanja_hangul::{Converter, Options, Style};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    // 1. test with load_dictionary which uses the hardcoded dictionary.
-    let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary()?;
-    h2h::chi2kor_file("sample.txt", "sample_hangul1.txt", &char_dic, &dueum_dic, &word_dic).await?;
+let conv = Converter::global();                     // 처음 부를 때 한 번 표를 만든다
+assert_eq!(conv.convert("樂園에서 音樂을"), "낙원에서 음악을");
 
-    //2. test with load_dictionary_from_file which loads the dictionary from a file.
-    let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary_from_file(
-        Path::new("hanja_char.csv"),
-        Path::new("dueum.csv"),
-        Path::new("hanja_word.csv")
-    )?;
-    h2h::chi2kor_file("sample.txt", "sample_hangul2.txt", &char_dic, &dueum_dic, &word_dic).await?;
-    Ok(())
-}
+// 한글(漢字) 꼴, 성씨 규칙 끄기
+let c = Converter::new().with_options(Options { style: Style::HangulHanja, surname: false });
+assert_eq!(c.convert("經濟"), "경제(經濟)");
+
+// 내 단어 더하기 (내장 표보다 우선)
+let mut c = Converter::new();
+c.add_word("金鍾泌", "김종필");
+
+// 형태소 분석기용: 한 구간의 독음과 후보들 ([0] 은 언제나 reading 과 같다)
+assert_eq!(conv.reading("樂園", true).as_deref(), Some("낙원"));
+let cands = conv.readings("樂", true, 8);           // ["악", "낙", "요"] (첫머리라 락 → 낙)
 ```
 
-원래 `sample.txt`에는 아래와 같이 한자가 포함되어 있습니다.
+### 명령줄
 
 ```
-「宋寅壽기자」14일 농림해양수산위의 농협 국감에선 올해 추곡수매와 농산물시장 
-개방에 따른 대책 등이 주요 쟁점으로 대두됐다. 
-
-客車, 六月, 庫間, 女子
-
-金泳鎭(국민회의) 韓灝鮮(자민련) 權五乙의원(민주당)은 ......
+cargo install hanja_hangul
+hanja2hangul 입력.txt -o 출력.txt
+echo "經濟 發展" | hanja2hangul --style hanja-hangul      # 經濟(경제) 發展(발전)
+hanja2hangul --no-surname < 입력.txt
 ```
 
-이것을 `chi2kor_file` 함수를 사용하여 한글로 변환하면 아래와 같이 변환됩니다.
+## 어떻게 읽는가
 
-```
-「송인수기자」14일 농림해양수산위의 농협 국감에선 올해 추곡수매와 농산물시장
-개방에 따른 대책 등이 주요 쟁점으로 대두됐다. 
+글을 한자 연쇄(한자가 이어진 구간)로 나누고, 연쇄마다 왼쪽부터:
 
-객차, 유월, 곳간, 여자
+1. **예외표 최장 일치** — 글자별로 읽으면 틀리는 단어(客車 객차, 困難 곤란, 樂園 낙원, 便所 변소 …).
+2. **글자별 대표 독음** — 표에 없으면 글자 하나씩.
+3. **두음법칙** — 연쇄 첫머리의 첫 음절에(女子 여자). 숫자나 한글 바로 뒤는 첫머리가 아니다(1995年度 1995년도, 色깔論 색깔론). 연쇄 중간이라도 두음이 일어나는 단어가 시작되면 적용하고(新女性 신여성), 앞 글자와 이미 한 단어를 이루면 막는다(評論家 평론가).
+4. **렬·률** — 모음·ㄴ 받침 뒤에서 열·율(分裂 분열, 比率 비율).
+5. **不** — ㄷ·ㅈ 앞에서 부, 그 밖에는 불(不當 부당, 不法 불법).
+6. **성씨** — 金·沈·葉·契·單 으로 시작하는 연쇄가 보통 낱말(金額 금액, 沈默 침묵)이 아니면 성씨 독음(金泳三 김영삼, 金대통령 김대통령). 李·盧·柳·林 은 두음법칙이 맡는다.
+7. **호환 한자**(U+F900~)는 통합 한자로 접어 읽는다. 표에 없는 한자는 그대로 둔다.
 
-김영진(국민회의) 한호선(자민련) 권오을의원(민주당)은 ......
-```
+## 자료
 
-일반 한자에 대한 한글 변환 및 두음법칙, 동음이자, 사이시옷 규칙에 의한 불규칙한 한글변환도 잘 되고 있음을 알 수 있습니다.
+| 파일 | 내용 | 출처 |
+|---|---|---|
+| `hanja_char.csv` | 한자 27,848자 → 독음 | 지은이 |
+| `dueum.csv` | 두음법칙 52행 | 지은이 |
+| `hanja_word.csv` | 손으로 검토한 불규칙 단어 135행 (내장 표 가운데 가장 우선) | 지은이 |
+| `data/words_nikl.csv` | 예외표 9,318행 — 사전 표제어 가운데 글자별로 읽으면 틀리는 것만 | 국립국어원 사전 파생 |
+| `data/dueum_words.txt` | 합성어 안 두음 단어 17,292 | 국립국어원 사전 파생 |
+| `data/dueum_block.txt` | 합성어 두음을 막는 2자어 7,523 | 국립국어원 사전 파생 |
+| `data/surname_block.txt` | 성씨로 읽지 않는 金·沈·葉·契·單 시작 낱말 2,815 | 국립국어원 사전 파생 |
+| `data/primary_override.csv` | 사전 표제어 집계로 바꾼 대표 독음 29자 | 국립국어원 사전 파생 |
+| `data/chars_ext.csv`, `data/alts_nikl.csv` | 확장 B 이상 글자 35자, 글자별 다른 독음 | 국립국어원 사전 파생 |
+| `data/compat.csv` | 호환 한자 → 통합 한자 | Unicode |
 
-## Conversion Method
+`data/` 의 사전 파생 표는 `tools/` 의 스크립트로 다시 만들 수 있다
+(`extract_nikl.py` → `build_words.py`; 입력은 국립국어원 사이트에서 받는 사전 전체 내려받기 자료).
 
-한자를 한글로 변환할 때 사용된 방법을 소개하겠습니다.
+## 라이선스
 
-각 문자에는 유니코드가 할당되어 있습니다. 한자에도 코드가 부여되어 있고, 한국, 중국, 일본에서 한자를 사용하다 보니, 굉장히 많은 코드가 한자에 부여되어 있습니다. 이 라이브러리에서 사용하는 코드는 27,848개의 한자코드입니다. 모두 엑셀에서 한글로 변환 가능한 코드입니다.
+- 코드와 지은이 자료(`hanja_char.csv`, `dueum.csv`, `hanja_word.csv`): MIT OR Apache-2.0.
+- `data/` 의 국립국어원 사전 파생 표: **CC BY-SA 2.0 KR**. 출처 —
+  국립국어원 《표준국어대사전》(https://stdict.korean.go.kr), 《우리말샘》(https://opendict.korean.go.kr).
+  이 표들을 고쳐 다시 배포하면 같은 조건(CC BY-SA)을 따른다.
+- 사전 파생 표를 싣고 싶지 않으면 `default-features = false` 로 쓴다(지은이 자료만; 정확도는 0.1.3 수준).
 
-- 한중일 통합 한자: 19968 ~ 40869 (20902개)
-- 한중일 통합 한자 확장 A: 13312 ~ 19893 (6582개)
-- 한중일 호환 한자1: 63744 ~ 64045 (302개)
-- 한중일 호환 한자2: 64048 ~ 64109 (62개)
+## 0.1 에서 옮기기
 
-이 코드를 이용하여 한자를 한글로 변환하는 것이 이 라이브러리의 핵심입니다. 이 코드는 한자에 대한 유니코드에 대한 설명이 나와 있는 다른 자료와 코드 범위와 개수가 좀 다를 수 있습니다. 이 범위는 실제 엑셀에서 변환 가능한 범위를 기준으로 하였습니다. 기초 변환 자료를 엑셀로 만들어서 변환하다 보니, 이렇게 된 것입니다.
+0.1 의 `load_dictionary`, `load_dictionary_from_file`, `chi2kor_str`, `chi2kor_file` 은 없어졌고 `tokio` 의존도 없어졌다.
 
-### Basic Conversion
+| 0.1 | 0.2 |
+|---|---|
+| `let (c, d, w) = load_dictionary()?; chi2kor_str(s, &c, &d, &w)` | `Converter::global().convert(s)` |
+| `chi2kor_file(입력, 출력, …).await` | `std::fs::write(출력, conv.convert(&std::fs::read_to_string(입력)?).as_bytes())` 또는 `hanja2hangul 입력 -o 출력` |
+| `hanja_word.csv` 에 단어 더하기 | `conv.add_word("金鍾泌", "김종필")` |
 
-기본 변환은, 위에서 설명한 27,848개의 한자코드에 대해 한글로 변환하는 것입니다.
+---
 
-변환 하려는 문장에서 문자 하나하나를 읽어서, 해당 문자가 한자이면, 한글로 변환합니다.
+## English
 
-이때 이용되는 것이 `hanja_char.csv` 파일입니다. 이 파일에는 한자와 한글로 변환된 문자가 콤마로 구분되어 저장되어 있습니다.
+`hanja_hangul` converts hanja (Chinese characters) in Korean text into hangul readings.
+No dependencies; all tables are embedded. It reads each run of hanja left to right using
+a longest-match exception table (only the dictionary headwords that per-character reading
+gets wrong), per-character default readings, the initial sound law (두음법칙, including
+inside compounds), the 렬/률 and 不 rules, and a surname rule for 金·沈·葉·契·單.
 
-### Dueum Law
+On 49,971 held-out headwords of the NIKL Standard Korean Dictionary and Urimalsaem it reads
+98.5% correctly (0.1.3: 93.4%); words in the dictionaries are read correctly 99.99% of the time.
+About 10 million characters per second on one core.
 
-두음법칙은 '녀, 뇨, 뉴, 니'가 단어 첫머리에 올 때, '여, 요, 유, 이'로 발음을 바꾸는 것을 말합니다.
-
-예를 들어, '녀자'는 '여자'로 읽어야 합니다.
-
-한자 단어를 한글로 변환 했을 때, 위 두음법칙에 해당하는 경우는 단어의 첫 글자를 두음법칙에 맞게 변환해야합니다.
-
-여기서, 알고리즘을 짜는 입장에서는 고민을 하게됩니다. 각 문자를 음소로 분리해서 두음법칙에 해당하는 지를 판단하게 할지, 아니면 두음법칙에 해당하는 모든 문자를 미리 매핑해 놓고 변환하게 할지 고민이 됩니다.
-
-필자는 두 번째 방법을 선택했습니다. 두음법칙에 해당하는 문자가 모두 해봐야 52개이기 때문입니다. 이 52개 문자가 들어 있는 것이 `dueum.csv` 파일입니다.
-
-알고리즘에서는, 한자 단어를 한글로 변환하고 나서, 두음법칙에 해당하는 문자가 단어의 첫 글자에 있으면, 그 문자를 두음법칙에 맞게 변환합니다.
-
-### Irregular Conversion
-
-두음법칙에 의한 불규칙 말고도, 기본 변환에 의해 해결이 안되는 불규칙 변환들이 있습니다.
-
-'동음이자'에 의한 불규칙 변환, 사이시옷 규칙에 의한 불규칙 변환 등이 있는데, 이러한 불규칙 변환들은 `hanja_word.csv` 파일에 매핑되어 있습니다.
-
-알고리즘에서는, 한자 단어가 있고, 이 한자 단어가 `hanja_word.csv` 파일에 있으면, 해당 단어를 매핑된 한글로 변환합니다.
-
-실제 알고리즘에서는 이 불규칙변환이 제일 먼저 일어나고, 그 다음에 '기본변환' 그리고 그 다음에 '두음법칙' 변환이 일어납니다.
-
-실제 코드는 `chi2kor_str` 함수에서 확인할 수 있습니다. 이 함수가 실제 변환을 수행하는 핵심 함수입니다.
+Code: MIT OR Apache-2.0. Tables in `data/` are derived from the NIKL Standard Korean Dictionary and
+Urimalsaem and are licensed CC BY-SA 2.0 KR; disable the default `nikl` feature to leave them out.

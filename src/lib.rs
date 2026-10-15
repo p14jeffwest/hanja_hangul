@@ -1,617 +1,428 @@
-//! # Hanja to Hangul
-//! 
-//! hanja_hangul is a library that converts Chinese characters to Korean characters.
-//! 
-//! The library provides the following functions:
-//! 
-//! * load_dictionary - Load dictionary from the hard-coded dictionary data and return the dictionary component as a tuple containing three HashMaps.
-//! * load_dictionary_from_file - Load dictionary files and return the dictionary component as a tuple containing three HashMaps.
-//! * chi2kor_file - Convert Chinese characters in the input file to Korean characters and write the result to the output file.
-//! * chi2kor_str - Convert Chinese characters in the input string to Korean characters.
-//! 
-//! The load_dictionary function does not require any csv files to be passed as arguments while the 'load_dictionary_from_file' function does. 
-//! 
-//! When using the 'load_dictionary_from_file' function, the dictionary files path should be supplied as arguments.
-//! The dictionary files can be downloaded from the following URLs:
-//! * hanja_char.csv - [Download](https://github.com/p14jeffwest/hanja_hangul/blob/main/hanja_char.csv)
-//! * dueum.csv - [Download](https://github.com/p14jeffwest/hanja_hangul/blob/main/dueum.csv)
-//! * hanja_word.csv - [Download](https://github.com/p14jeffwest/hanja_hangul/blob/main/hanja_word.csv)
-//! 
-//! # Examples
-//! 
+//! # hanja_hangul — 한자를 한글로
+//!
+//! 국한문 혼용 글의 한자를 한글 독음으로 바꾼다. 의존 크레이트가 없고, 자료는 모두 내장이다.
+//!
 //! ```
-//! use hanja_hangul as h2h;
-//! use std::error::Error;
-//! use std::path::Path;
-//! 
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn Error>> {
-//!     // 1. test with load_dictionary which uses the hardcoded dictionary.
-//!     let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary()?;
-//!     h2h::chi2kor_file("sample.txt", "sample_hangul1.txt", &char_dic, &dueum_dic, &word_dic).await?;
-//! 
-//!     //2. test with load_dictionary_from_file which loads the dictionary from a file.
-//!     let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary_from_file(
-//!         Path::new("hanja_char.csv"),
-//!         Path::new("dueum.csv"),
-//!         Path::new("hanja_word.csv")
-//!     )?;
-//!     h2h::chi2kor_file("sample.txt", "sample_hangul2.txt", &char_dic, &dueum_dic, &word_dic).await?;
-//!     Ok(())
-//! }
-//!  
-//! ```
-//! 
-//! if the output_file is not supplied, the function will create a new file attached with "(한글화)" to the input file name.
-//! ```
-//! h2h::chi2kor_file("test.txt", "test_converted.txt", &char_dic, &dueum_dic, &word_dic).await?;
+//! use hanja_hangul::Converter;
+//!
+//! let conv = Converter::global();
+//! assert_eq!(conv.convert("金대통령은 新女性 運動과 經濟理論을 말했다"),
+//!            "김대통령은 신여성 운동과 경제이론을 말했다");
+//! assert_eq!(conv.convert("樂園에서 音樂과 快樂을"), "낙원에서 음악과 쾌락을");
 //! ```
 //!
-//! # Note
-//! The function is an asynchronous function that uses the tokio library.
-//! 
-//! To use this library, add the following to your Cargo.toml file:
-//! 
-//! ```
-//! [dependencies]
-//! hanja_hangul = "0.1.3"
-//! tokio = { version = "1", features = ["full"] }
-//! ```
-//! 
-//! or, you can use the following command to add tokio to your project:
-//! 
-//! ```
-//! cargo add tokio --features full
-//! ```
-//! 
-//! # Note
-//! In here, I'll explain how to convert Chinese characters to Korean characters in Korean.
-//! 
-//! hanja_hangul는 한글로 변환하는 라이브러리입니다.
-//! 
-//! 한자로된 문자는 한글로 변환할 수 있습니다. 따라서, 각 한자 별로 한글로 어떻게 읽으면 될지를 매핑하는 사전을 만들 수 있습니다.
-//! 
-//! 그런데, 이와 같이 각각의 한자를 한글로 변환했을 때, 맞지 않는 경우가 있습니다. 
-//! 예를 들어 '女子'라는 한자는 '녀자'로 변환되겠지만 실제로는 '여자'로 읽어야 합니다. 
-//! 이러한 것을 '두음법칙'이라고 하는데, '녀, 뇨, 뉴, 니'가 단어 첫머리에 올 때, '여, 요, 유, 이'로 발음을 바꾸는 것을 말합니다.
-//! 
-//! 두음법칙만으로 해결되지 않는 경우도 있습니다. 
-//! 대표적인 예가 '동음이자'입니다. '동음이자'란 한자가 여러 개의 음을 가질 때, 그 중에서 어떤 음으로 읽어야 할지를 말합니다.
-//! 예를 들어 '車'라는 한자는 '차'로 읽을 수도 있고 '거'로 읽을 수도 있습니다. 'hanja_char.csv' 파일에는 '거'로 변환되게 되어 있습니다.
-//! 따라서, '客車'라는 한자 단어에 대해서 'hanja_char.csv'에 의한 규칙으로는 '객거'로 변환되지만, 실제로는 '객차'로 읽어야 합니다.
-//! 이러한 경우를 해결하기 위해 '동음이자'의 경우 원래의 규칙과 다르게 변환되어야 하는 단어를 매핑해 놓았습니다.
-//! 
-//! 또한, 다른 불규칙한 변환이 필요한 단어들도 매핑되어 있습니다.
-//! 예를 들어, '庫間'이라는 단어는 '고간'으로 변환되지만, 실제로는 '곳간'이라고 읽어야 합니다. 
-//! 이러한 불규칙한 변환이 일어나는 단어들을 모두 매핑해 놓았습니다.
-//! 
-//! 이렇게 미리 만들어 놓은 사전은 load_dictionary() 함수를 호출하면 로드됩니다.
-//! 
-//! 그런데 만약, 이 라이브러리에 내장된 사전을 이용하지 않고, 자신이 만든 사전을 이용하고 싶다면,
-//! load_dictionary_from_file() 함수를 사용하면 됩니다.
-//! 
-//! 이 함수는 'hanja_char.csv', 'dueum.csv', 'hanja_word.csv' 파일을 읽어서 사전을 생성합니다.
-//! 이 3개의 파일에 대해서 아래의 github 주소에서 다운로드 받을 수 있습니다.
-//! 이 파일에다 자신이 원하는 한자와 한글 변환을 추가하면 됩니다.
-//! 
-//!   https://github.com/p14jeffwest/hanja_hangul
-//! 
-//! 'hanja_word.csv' 파일에, 불규칙하게 변환되는 단어들을 가능한 많이 넣어두긴 했는데, 모든 경우를 다 매핑했다고 할 수는 없습니다.
-//! 만약 변환 결과가 맞지 않는 경우, 'hanja_word.csv' 파일에 새로운 매핑을 추가하면 됩니다. 
-//! 
-//! 아래 코드는 'hanja_hangul' 라이브러리를 사용하여 'sample.txt' 파일에 있는 한자를 한글로 변환한 후, 'sample_hangul.txt' 파일에 저장하는 코드입니다.
-//! 
-//! ```
-//! use hanja_hangul as h2h;
-//! use std::error::Error;
-//! use std::path::Path;
-//! 
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn Error>> {
-//!     // 1. test with load_dictionary which uses the hardcoded dictionary.
-//!     let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary()?;
-//!     h2h::chi2kor_file("sample.txt", "sample_hangul1.txt", &char_dic, &dueum_dic, &word_dic).await?;
-//! 
-//!     //2. test with load_dictionary_from_file which loads the dictionary from a file.
-//!     let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary_from_file(
-//!         Path::new("hanja_char.csv"),
-//!         Path::new("dueum.csv"),
-//!         Path::new("hanja_word.csv")
-//!     )?;
-//!     h2h::chi2kor_file("sample.txt", "sample_hangul2.txt", &char_dic, &dueum_dic, &word_dic).await?;
-//!     Ok(())
-//! }
-//! ```
-//! 
-//! 원래 sample.txt에는 아래와 같이 한자가 포함되어 있습니다.
-//! 
-//! ```
-//! 「宋寅壽기자」14일 농림해양수산위의 농협 국감에선 올해 추곡수매와 농산물시장 
-//! 개방에 따른 대책 등이 주요 쟁점으로 대두됐다. 
-//! 
-//! 客車, 六月, 庫間, 女子
-//! 
-//! 金泳鎭(국민회의) 韓灝鮮(자민련) 權五乙의원(민주당)은 ......
-//! ```
-//! 
-//! 이것을 chi2kor_file 함수를 사용하여 한글로 변환하면 아래와 같이 변환됩니다.
-//! 
-//! ```
-//! 「송인수기자」14일 농림해양수산위의 농협 국감에선 올해 추곡수매와 농산물시장
-//! 개방에 따른 대책 등이 주요 쟁점으로 대두됐다. 
-//! 
-//! 객차, 유월, 곳간, 여자
-//! 
-//! 김영진(국민회의) 한호선(자민련) 권오을의원(민주당)은 ......
-//! ```
-//! 
-//! 일반 한자에 대한 한글 변환 및 두음법칙, 동음이자, 사이시옷 규칙에 의한 불규칙한 한글변환도 잘 되고 있음을 알 수 있습니다. 
-//! 
-//! 
-//! # Note
-//! 한자를 한글로 변환할 때 사용된 방법을 소개하겠습니다.
-//! 
-//! 각 문자에는 유니코드가 할당되어 있습니다. 한자에도 코드가 부여되어 있고, 한국, 중국, 일본에서 한자를 사용하다 보니, 굉장히 많은 코드가 한자에 부여되어 있습니다.
-//! 이 라이브러리에서 사용하는 코드는 27,848개의 한자코드입니다. 모두 엑셀에서 한글로 변환 가능한 코드입니다.
-//! 
-//! * 한중일 통합 한자: 19968 ~ 40869 (20902개)
-//! * 한중일 통합 한자 확장 A: 13312 ~ 19893 (6582개)
-//! * 한중일 호환 한자1: 63744 ~ 64045 (302개)
-//! * 한중일 호환 한자2: 64048 ~ 64109 (62개)
-//! 
-//! 이 코드를 이용하여 한자를 한글로 변환하는 것이 이 라이브러리의 핵심입니다.
-//! 이 코드는 한자에 대한 유니코드에 대한 설명이 나와 있는 다른 자료와 코드 범위와 개수가 좀 다를 수 있습니다. 
-//! 이 범위는 실제 엑셀에서 변환 가능한 범위를 기준으로 하였습니다. 기초 변환 자료를 엑셀로 만들어서 변환하다 보니, 이렇게 된 것입니다.
-//! 
-//! 1. 기본 변환
-//! 
-//! 기본 변환은, 위에서 설명한 27,848개의 한자코드에 대해 한글로 변환하는 것입니다. 
-//! 
-//! 변환 하려는 문장에서 문자 하나하나를 읽어서, 해당 문자가 한자이면, 한글로 변환합니다.
-//! 
-//! 이때 이용되는 것이 'hanja_char.csv' 파일입니다. 이 파일에는 한자와 한글로 변환된 문자가 콤마로 구분되어 저장되어 있습니다.
-//! 
-//! 2. 두음법칙
-//! 
-//! 두음법칙은 '녀, 뇨, 뉴, 니'가 단어 첫머리에 올 때, '여, 요, 유, 이'로 발음을 바꾸는 것을 말합니다.
-//! 
-//! 예를 들어, '녀자'는 '여자'로 읽어야 합니다.
-//! 
-//! 한자 단어를 한글로 변환 했을 때, 위 두음법칙에 해당하는 경우는 단어의 첫 글자를 두음법칙에 맞게 변환해야합니다. 
-//! 
-//! 여기서, 알고리즘을 짜는 입장에서는 고민을 하게됩니다.  
-//! 각 문자를 음소로 분리해서 두음법칙에 해당하는 지를 판단하게 할지, 아니면 두음법칙에 해당하는 모든 문자를 미리 매핑해 놓고 변환하게 할지 고민이 됩니다.
-//! 
-//! 필자는 두 번째 방법을 선택했습니다. 두음법칙에 해당하는 문자가 모두 해봐야 52개이기 때문입니다.
-//! 이 52개 문자가 들어 있는 것이 dueum.csv 파일입니다.
-//! 
-//! 알고리즘에서는, 한자 단어를 한글로 변환하고 나서, 두음법칙에 해당하는 문자가 단어의 첫 글자에 있으면, 그 문자를 두음법칙에 맞게 변환합니다.
-//! 
-//! 3. 불규칙 변환
-//! 
-//! 두음법칙에 의한 불규칙 말고도, 기본 변환에 의해 해결이 안되는 불규칙 변환들이 있습니다. 
-//! 
-//! '동음이자'에 의한 불규칙 변환, 사이시옷 규칙에 의한 불규칙 변환 등이 있는데, 이러한 불규칙 변환들은 'hanja_word.csv' 파일에 매핑되어 있습니다.
-//! 
-//! 알고리즘에서는, 한자 단어가 있고, 이 한자 단어가 'hanja_word.csv' 파일에 있으면, 해당 단어를 매핑된 한글로 변환합니다.
-//! 
-//! 실제 알고리즘에서는 이 불규칙변환이 제일 먼저 일어나고, 그 다음에 '기본변환' 그리고 그 다음에 '두음법칙' 변환이 일어납니다.
-//! 
-//! 실제 코드는 'chi2kor_str' 함수에서 확인할 수 있습니다. 이 함수가 실제 변환을 수행하는 핵심 함수입니다.
-//! 
+//! ## 어떻게 읽는가
+//!
+//! 글을 한자 연쇄(한자가 이어진 구간) 단위로 읽는다. 연쇄마다 왼쪽부터:
+//!
+//! 1. **예외표 최장 일치** — 글자별로 읽으면 틀리는 단어(客車 객차, 困難 곤란, 樂園 낙원 …)는
+//!    표에 적힌 독음을 쓴다. 표는 손으로 검토한 `hanja_word.csv` 와, 국립국어원
+//!    《표준국어대사전》·《우리말샘》 표제어에서 "글자별로 읽으면 틀리는 것만" 뽑은
+//!    `data/words_nikl.csv` 다.
+//! 2. **글자별 대표 독음** — 표에 없으면 글자 하나씩 대표 독음으로.
+//! 3. **두음법칙** — 연쇄 첫머리(앞이 공백·문장부호·글 처음)의 첫 음절에. 숫자나 한글 바로 뒤는
+//!    첫머리가 아니다(1995年度 1995년도, 色깔論 색깔론). 연쇄 중간이라도 두음이 일어나는
+//!    단어가 시작되면 적용한다(新女性 신여성) — 단 앞 글자와 이미 한 단어를 이루면 막는다
+//!    (評論家 평론가).
+//! 4. **렬·률 규칙** — 모음이나 ㄴ 받침 뒤의 렬·률은 열·율(分裂 분열, 比率 비율).
+//! 5. **不** — ㄷ·ㅈ 앞에서 부, 그 밖에는 불(不當 부당, 不法 불법).
+//! 6. **茶** — 대표 독음은 차(綠茶 녹차, 茶 한 잔). 茶房 다방·茶道 다도처럼 앞자리 '다' 는 예외표가 받는다.
+//! 7. **성씨** — 金·沈·葉·契·單 으로 시작하는 연쇄가 보통 낱말(金額 금액)이 아니면 성씨 독음
+//!    (金泳三 김영삼, 金대통령 김대통령). [`Options::surname`] 으로 끈다.
+//!
+//! 사전 표제어로 잰 정확도와 자료 출처는 README 를 보라.
 
-mod dueum;
-mod hanja_char;
-mod hanja_word;
+mod tables;
 
-use std::char;
-use std::collections::HashMap;
-use std::error::Error;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::borrow::Cow;
+use std::sync::OnceLock;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tables::Tables;
 
-const KO_START:u32 = 44032;
-const KO_END:u32 = 55203;
-
-const CHI_S1:u32 = 13312;
-const CHI_E1:u32 = 19903;
-
-const CHI_S2:u32 = 19968;
-const CHI_E2:u32 = 40959;
-
-const CHI_S3:u32 = 63744;
-const CHI_E3:u32 = 64045;
-
-const CHI_S4:u32 = 64048;
-const CHI_E4:u32 = 64109;
-
-/// Load dictionary files and return the dictionary component as a tuple containing three HashMaps.
-/// The tuple contains the following HashMaps: (hanja_dic, dueum_dic, word_dic)
-/// 
-/// hanja_dic: HashMap<char, char> - A dictionary that maps Chinese characters to Korean characters.
-/// dueum_dic: HashMap<char, char> - A dictionary that maps Korean characters to Korean characters according to the dueum law.  
-/// word_dic: HashMap<String, String> - A dictionary that maps Chinese words to Korean words especially for words that beyond the regular conversion rules.
-///
-/// The HashMaps should be sent as arguments to the chi2kor function.
-/// 
-/// The dictionary files path should be supplied as arguments.
-/// The dictionary files path should be matched with the following files:
-///   * hanja_char.csv - A CSV file that contains the mapping of Chinese characters to Korean characters.
-///   * dueum.csv - A CSV file that contains the mapping of Korean characters to Korean characters according to the dueum law.
-///   * hanja_word.csv - A CSV file that contains the mapping of Chinese words to Korean words.
-///  
-/// # Errors
-/// If the function fails to open the dictionary files, it will return an error.
-/// 
-/// # Examples
-/// ```
-/// use hanja_hangul as h2h;
-/// use std::collections::HashMap;
-/// use std::error::Error;
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn Error>> { 
-///   let (hanja_dic, dueum_dic, word_dic) = h2h::load_dictionary("hanja_char.csv","dueum.csv", "hanja_word.csv")?;
-///   h2h::chi2kor_file("123.txt", "", &hanja_dic, &dueum_dic, &dongum_dic).await?;
-///   Ok(())
-/// }
-/// ```
-/// 
-pub fn load_dictionary_from_file(hanja_char_path:&Path, dueum_path:&Path, hanja_word_path:&Path) 
-        -> Result<(HashMap<char, char>, HashMap<char, char>, HashMap<String, String>), Box<dyn Error>> {
-    let char_dic = generate_dic_char(hanja_char_path).map_err(|_| "open hanja_char.csv file was failed.")?;
-    let dueum_dic = generate_dic_char(dueum_path).map_err(|_| "open dueum.csv file was failed.")?;
-    let word_dic = generate_dic_str(hanja_word_path).map_err(|_| "open hanja_word.csv file was failed.")?;
-    Ok((char_dic, dueum_dic, word_dic))
+/// 출력 꼴
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Style {
+    /// 한글만: 經濟 → 경제
+    #[default]
+    Hangul,
+    /// 한글(漢字): 經濟 → 경제(經濟)
+    HangulHanja,
+    /// 漢字(한글): 經濟 → 經濟(경제)
+    HanjaHangul,
 }
 
-
-/// Load dictionary data and return the dictionary component as a tuple containing three HashMaps.
-/// The tuple contains the following HashMaps: (hanja_dic, dueum_dic, word_dic)
-/// 
-/// hanja_dic: HashMap<char, char> - A dictionary that maps Chinese characters to Korean characters.
-/// dueum_dic: HashMap<char, char> - A dictionary that maps Korean characters to Korean characters according to the dueum law.  
-/// word_dic: HashMap<String, String> - A dictionary that maps Chinese words to Korean words especially for words that beyond the regular conversion rules.
-///
-/// The HashMaps should be sent as arguments to the chi2kor function.
-///    
-/// This function does not require any csv files to be passed as arguments while the 'load_dictionary_from_file' function does.
-/// It uses the hard-coded dictionary data instead of reading from files.
-/// So, it can be used without any external files.
-/// 
-/// # Errors
-/// If the function fails to read the dictionary data, it will return an error.
-/// 
-/// # Examples
-/// ```
-/// use hanja_hangul as h2h;
-/// use std::collections::HashMap;
-/// use std::error::Error;
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn Error>> { 
-///   let (hanja_dic, dueum_dic, word_dic) = h2h::load_dictionary()?;
-///   h2h::chi2kor_file("123.txt", "", &hanja_dic, &dueum_dic, &dongum_dic).await?;
-///   Ok(())
-/// }
-/// ```
-/// 
-pub fn load_dictionary() 
-        -> Result<(HashMap<char, char>, HashMap<char, char>, HashMap<String, String>), Box<dyn Error>> {
-    
-    //1. 기본한자 변환 사전
-    let char_dic = hanja_char::HANJA_BASIC.lines()
-        .filter_map(|line| {
-            let parts: Vec<&str> = line.split(',').collect();
-            if parts.len() == 2 {
-                let key_char = parts[0].trim().chars().next().unwrap();
-                let val_char = parts[1].trim().chars().next().unwrap();
-                Some((key_char, val_char))
-            } else {
-                None
-            }
-        })
-        .collect::<HashMap<char, char>>();
-
-
-    //2. 두음법칙 사전
-    //dueum::DUEUM은 ("냥,양\n") 형태의 여러 라인으로 구성되어 있다. 
-    //모든 라인을 읽고, 각 라인 별로 콤마를 기준으로 split하여, 앞 문자와 뒤 문자를 각각 key와 value로 설정한다.
-    //이때, key와 value는 모두 char로 변환하여 저장한다.
-    let dueum_dic = dueum::DUEUM.lines()
-        .filter_map(|line| {
-            let parts: Vec<&str> = line.split(',').collect();
-            if parts.len() == 2 {
-                let key_char = parts[0].trim().chars().next().unwrap();
-                let val_char = parts[1].trim().chars().next().unwrap();
-                Some((key_char, val_char))
-            } else {
-                None
-            }
-        })
-        .collect::<HashMap<char, char>>();
-
-    //3. 불규칙 변환 한자사전
-    // hanja_word::HANJA_SPECIAL은 ("女子,여자\n") 형태의 여러 라인으로 구성되어 있다.
-    //모든 라인을 읽고, 각 라인 별로 콤마를 기준으로 split하여, 앞 문자와 뒤 문자를 각각 key와 value로 설정한다.
-    //이때, key와 value는 모두 String으로 변환하여 저장한다.
-    let word_dic = hanja_word::HANJA_SPECIAL.lines()
-        .filter_map(|line| {
-            let parts: Vec<&str> = line.split(',').collect();
-            if parts.len() == 2 {
-                let key_str = parts[0].trim().to_string();
-                let val_str = parts[1].trim().to_string();
-                Some((key_str, val_str))
-            } else {
-                None
-            }
-        })
-        .collect::<HashMap<String, String>>();  
-
-    Ok((char_dic, dueum_dic, word_dic))
+/// 변환 선택 사항
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Options {
+    /// 출력 꼴
+    pub style: Style,
+    /// 성씨 규칙(金泳三 김영삼). 끄면 金 은 늘 금.
+    pub surname: bool,
 }
 
-
-/// Convert Chinese characters in the input file to Korean characters and write the result to the output file.
-/// If the output file is not supplied, the function will create a new file attached with "(한글화)" to the input file name.
-/// 
-/// # Arguments
-/// * `input_file` - The path of the input file that contains Chinese characters.
-/// * `output_file` - The path of the output file that will contain the converted Korean characters. 
-///                   If the output file is not supplied, as the blank string, the function will create a new file attached with "(한글화)" to the input file name.
-/// * `char_dic` - A dictionary that maps Chinese characters to Korean characters.
-/// * `dueum_dic` - A dictionary that maps Korean characters to Korean characters according to the dueum law.
-/// * `word_dic` - A dictionary that maps Chinese words to Korean words especially for words that beyond the regular conversion rules.
-/// 
-/// # Errors
-/// If the function fails to open the input file or create the output file, it will return an error.
-/// 
-/// # Examples
-/// ```
-/// use hanja_hangul as h2h;
-/// use std::collections::HashMap;
-/// use std::error::Error;
-/// 
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn Error>> {
-///     let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary()?;
-///     h2h::chi2kor_file("test.txt", "test_converted.txt", &char_dic, &dueum_dic, &word_dic).await?;
-///     Ok(())
-/// }
-/// ```
-/// 
-/// if the output_file is not supplied, the function will create a new file attached with "(한글화)" to the input file name.
-/// ```
-/// h2h::chi2kor_file("test.txt", "test_converted.txt", &char_dic, &dueum_dic, &word_dic).await?;
-/// ```
-/// 
-/// # Note
-/// The function is an asynchronous function that uses the tokio library.
-/// 
-/// # Note
-/// Prior to using this function, the load_dictionary function should be called to load the dictionary files.
-/// 
-pub async fn chi2kor_file(
-        input_file:&str,
-        output_file:&str, 
-        char_dic:&HashMap<char,char>, 
-        dueum_dic:&HashMap<char,char>,
-        word_dic:&HashMap<String, String>) -> Result<(),Box<dyn Error>>{
-    //1. check whether output_file is supplied or not
-    let is_output_file = if output_file.len() == 0 {false} else {true};
-
-    //2. read input_file and generate string with the contents   
-    let f = tokio::fs::File::open(input_file).await?;  
-    let mut rdr = tokio::io::BufReader::new(f);
-    let mut buf = String::new();    
-    rdr.read_to_string(&mut buf).await?;   
-
-    //3.convert to hangul.
-    //  if there is no chinese character in the string, chi2kor_str function will return None.
-    //  Therefore, it is None, create new file with the same contents.
-    //  if exist, create new file with the converted string.
-    let new_buf = match chi2kor_str(&buf, &char_dic, &dueum_dic, &word_dic) {
-        Some(val) => {val},
-        None => {buf},
-    };
-    
-    //4. write to file.
-    //  if there is no output_file, create new file using get_new_file_path function.
-    //  if there is output_file, write new_buf to the file.
-    let tgt_file_name = if !is_output_file {get_new_file_path(input_file)} else {output_file.to_string()};
-    let new_file = tokio::fs::File::create(&tgt_file_name).await?;
-    let mut writer = tokio::io::BufWriter::new(new_file);
-    let _ = writer.write_all(&new_buf.as_bytes()).await;
-    writer.flush().await?;
-
-    Ok(())
+impl Default for Options {
+    fn default() -> Self {
+        Options { style: Style::Hangul, surname: true }
+    }
 }
 
-/// Convert Chinese characters in the input string to Korean characters.
-/// If there are no Chinese characters in the input string, the function will return None.
-/// 
-/// # Arguments
-/// * `input_str` - A string that contains Chinese characters.  
-/// * `char_dic` - A dictionary that maps Chinese characters to Korean characters.
-/// * `dueum_dic` - A dictionary that maps Korean characters to Korean characters according to the dueum law.
-/// * `word_dic` - A dictionary that maps Chinese words to Korean words especially for words that beyond the regular conversion rules.
-///
-/// # Returns
-/// If there are no Chinese characters in the input string, the function will return None.
-/// If there are Chinese characters in the input string, the function will return the converted string.
-/// 
-/// # Examples
-/// ```
-/// use hanja_hangul as h2h;
-/// use std::collections::HashMap;
-/// 
-/// let char_dic: HashMap<char, char> = HashMap::new();
-/// let dueum_dic: HashMap<char, char> = HashMap::new();
-/// let word_dic: HashMap<String, String> = HashMap::new();
-/// let input_str = "你好，我是韩国人。";
-/// 
-/// let (char_dic, dueum_dic, word_dic) = h2h::load_dictionary()?;
-/// let result = h2h::chi2kor_str(input_str, &char_dic, &dueum_dic, &word_dic);
-/// println!("{:?}", result);
-/// ```
-/// 
-pub fn chi2kor_str(
-        input_str:&str,         
-        char_dic:&HashMap<char,char>, 
-        dueum_dic:&HashMap<char,char>,
-        word_dic:&HashMap<String, String>) -> Option<String>{
-    
-        //1. obtain char array from input_str
-        let mut c_iter = input_str.chars().peekable();           
+/// 한자 → 한글 변환기. 표를 한 번 만들어 두고 여러 번 쓴다.
+#[derive(Debug, Clone)]
+pub struct Converter {
+    t: Tables,
+    opts: Options,
+}
 
-        // 2. convert to hangul 
-        let mut w_buf:String = String::new(); 
-        let mut is_exist_chi:bool = false;     
-        loop {    
-            //2.1 pick a word only contains chinese character
-            let mut word_buf:String = String::new();   
-            let mut temp_iter = c_iter.clone();
-            while let Some(c) = temp_iter.peek() {
-                if is_chi(&c) {word_buf.push(*c); temp_iter.next();}
-                else {break;}
+/// 성씨 독음 (두음법칙으로 해결되지 않는 다독음 성씨만; 李·盧·柳·林 은 두음법칙이 맡는다)
+const SURNAMES: [(char, char); 5] = [('金', '김'), ('沈', '심'), ('葉', '섭'), ('契', '글'), ('單', '선')];
+
+impl Default for Converter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Converter {
+    /// 내장 자료로 새 변환기를 만든다 (수십 ms). 여러 번 쓸 거면 [`Converter::global`].
+    pub fn new() -> Self {
+        Converter { t: Tables::builtin(), opts: Options::default() }
+    }
+
+    /// 프로그램 전체가 함께 쓰는 기본 변환기 (처음 부를 때 한 번 만든다)
+    pub fn global() -> &'static Converter {
+        static G: OnceLock<Converter> = OnceLock::new();
+        G.get_or_init(Converter::new)
+    }
+
+    /// 선택 사항을 바꾼 변환기
+    pub fn with_options(mut self, opts: Options) -> Self {
+        self.opts = opts;
+        self
+    }
+
+    pub fn options(&self) -> Options {
+        self.opts
+    }
+
+    /// 예외 단어를 더한다 (내장 표보다 우선). 독음에 `거란(글안)` 처럼 괄호를 쓰면
+    /// [`convert`](Self::convert) 는 그대로 내고, [`reading`](Self::reading) 은 괄호 앞을 쓴다.
+    pub fn add_word(&mut self, hanja: &str, hangul: &str) {
+        let k = self.t.fold_str(hanja);
+        self.t.max_word = self.t.max_word.max(k.len());
+        self.t.words.insert(k, hangul.to_string());
+    }
+
+    /// 글자 하나의 대표 독음
+    pub fn char_reading(&self, c: char) -> Option<char> {
+        self.t.prim.get(&self.t.fold(c)).copied()
+    }
+
+    /// 글 전체를 바꾼다. 한자가 없으면 빌려 온 그대로 돌려준다.
+    pub fn convert<'a>(&self, text: &'a str) -> Cow<'a, str> {
+        if !contains_hanja(text) {
+            return Cow::Borrowed(text);
+        }
+        let cs: Vec<char> = text.chars().collect();
+        let mut out = String::with_capacity(text.len() * 3 / 2);
+        let mut i = 0;
+        while i < cs.len() {
+            if !is_hanja(cs[i]) {
+                out.push(cs[i]);
+                i += 1;
+                continue;
             }
+            let mut j = i;
+            while j < cs.len() && is_hanja(cs[j]) {
+                j += 1;
+            }
+            // 연쇄 첫머리: 앞이 숫자나 한글 음절이면 아니다
+            let word_start = i == 0 || !(cs[i - 1].is_ascii_digit() || is_syllable(cs[i - 1]));
+            self.convert_run(&cs[i..j], word_start, &mut out);
+            i = j;
+        }
+        Cow::Owned(out)
+    }
 
-            //2.2 if word_buf is not empty, check whether it is in the word_dic or not.
-            //    if exist, append the value to w_buf and continue.
-            //    if not, revert the c_iter and continue.
-            if word_buf.len() > 0 {
-                match word_dic.get(&word_buf) {
-                    Some(val) => {
-                        w_buf.push_str(val); 
-                        is_exist_chi = true; 
-                        c_iter = temp_iter; // Move the main iterator forward
-                        continue;
-                    },
-                    None => {}
+    /// 한자 연쇄 하나. 글자표에 없는 글자가 있으면 그 글자는 그대로 두고 앞뒤를 따로 읽는다.
+    fn convert_run(&self, run: &[char], word_start: bool, out: &mut String) {
+        let folded: Vec<char> = run.iter().map(|&c| self.t.fold(c)).collect();
+        let mut s = 0;
+        let mut ws = word_start;
+        while s < folded.len() {
+            if !self.t.prim.contains_key(&folded[s]) {
+                out.push(run[s]);
+                s += 1;
+                ws = false;
+                continue;
+            }
+            let mut e = s;
+            while e < folded.len() && self.t.prim.contains_key(&folded[e]) {
+                e += 1;
+            }
+            let reading = self.read_with_surname(&folded[s..e], ws, true).unwrap_or_default();
+            let original: String = run[s..e].iter().collect();
+            match self.opts.style {
+                Style::Hangul => out.push_str(&reading),
+                Style::HangulHanja => {
+                    out.push_str(&reading);
+                    out.push('(');
+                    out.push_str(&original);
+                    out.push(')');
+                }
+                Style::HanjaHangul => {
+                    out.push_str(&original);
+                    out.push('(');
+                    out.push_str(&reading);
+                    out.push(')');
                 }
             }
-            
-            //2.3 pick a char. if c is None, it's end of file
-            let c = match c_iter.next() { 
-                Some(ch) => {ch},  None => {break;} 
-            };
-            let mut new_c = c.clone();
-    
-            //2.4 if hanja then convert to hangul else not change       
-            if is_chi(&c) {         
-                match char_dic.get(&c) {
-                    Some(val) => {new_c = *val; is_exist_chi = true; },  
-                    None => {},
-                };          
-    
-                //2.5. dueum law(두음법칙)
-                if let Some(c_peek) = c_iter.peek(){                
-                    if is_kor_or_chi(&c_peek) { // if next char is exist
-                        match dueum_dic.get(&new_c) {
-                            Some(ch) => {new_c = *ch;},
-                            None => {},
-                        }
-                    }                     
-                }          
+            s = e;
+            ws = false;
+        }
+    }
+
+    /// 성씨 규칙을 얹은 읽기
+    fn read_with_surname(&self, span: &[char], word_start: bool, gloss: bool) -> Option<String> {
+        if self.opts.surname {
+            if let Some(r) = self.surname_reading(span, gloss) {
+                return Some(r);
             }
-            w_buf.push(new_c);
         }
-        
-        //3. if there is no chinese character in the string, return None.
-        //   if exist, return the converted string.
-        if !is_exist_chi {return None;}
-        Some(w_buf)        
-}    
-
-
-
-
-
-/// Convert the contents of the input file to a HashMap that contains "character, character" format data.
-///
-/// # Arguments
-/// * `file_path` - The path of the input file that contains key-value data separated by a comma.
-/// 
-/// # Returns
-/// A HashMap that contains the mapping of key-value character data read from the input file.
-/// 
-/// # Errors
-/// If the function fails to open the input file, it will return an error.
-/// 
-fn generate_dic_char(file_path:&Path) -> Result<HashMap<char, char>, Box<dyn Error>> {
-    let file = File::open(file_path)?;
-    let reader = BufReader::new(file);
-    let mut dic: HashMap<char, char> = HashMap::new();
-
-    for line in reader.lines() {
-        let line = line?;
-        let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() == 2 {
-            let key_char = parts[0].trim().chars().next().unwrap();
-            let val_char = parts[1].trim().chars().next().unwrap();
-            dic.insert(key_char, val_char);
-        }
+        self.read(span, word_start, gloss)
     }
-    Ok(dic)
-}
 
-
-
-/// Convert the contents of the input file to a HashMap that contains "string, string" format data.
-/// 
-/// # Arguments
-/// * `file_path` - The path of the input file that contains key-value data separated by a comma.
-/// 
-/// # Returns
-/// A HashMap that contains the mapping of key-value string data read from the input file.
-/// 
-/// # Errors
-/// If the function fails to open the input file, it will return an error.
-/// 
-fn generate_dic_str(file_path:&Path) -> Result<HashMap<String, String>, Box<dyn Error>> {
-    let file = File::open(file_path)?;
-    let reader = BufReader::new(file);
-    let mut dic: HashMap<String, String> = HashMap::new();
-
-    for line in reader.lines() {
-        let line = line?;
-        let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() == 2 {
-            let key_str = parts[0].trim().to_string();
-            let val_str = parts[1].trim().to_string();
-            dic.insert(key_str, val_str);
+    /// 金·沈·葉·契·單 으로 시작하는 연쇄를 성씨로 읽을지.
+    /// 연쇄가 2~3자면 연쇄 전체가, 4자 이상이면 앞 2~4자가 보통 낱말 표(surname_block)에 있으면 성씨가 아니다.
+    /// 한 글자(뒤에 한글이 붙는 金대통령)는 金·沈 만.
+    fn surname_reading(&self, span: &[char], gloss: bool) -> Option<String> {
+        // 보통 낱말 표가 없으면(nikl 기능 끔) 金額 까지 김액 이 되므로 규칙을 쓰지 않는다
+        if self.t.surname_block.is_empty() {
+            return None;
         }
+        let &(c, sur) = SURNAMES.iter().find(|(c, _)| *c == span[0])?;
+        if span.len() == 1 && c != '金' && c != '沈' {
+            return None;
+        }
+        let blocked = if span.len() <= 3 {
+            self.t.surname_block.contains(span)
+        } else {
+            (2..=4).any(|l| self.t.surname_block.contains(&span[..l]))
+        };
+        if blocked {
+            return None;
+        }
+        let mut r = String::new();
+        r.push(sur);
+        if span.len() > 1 {
+            r.push_str(&self.read(&span[1..], false, gloss)?);
+        }
+        Some(r)
     }
-    Ok(dic)
+
+    /// 한자열(통합 한자로 접힌 것)의 독음. `word_start` 면 첫머리 두음.
+    /// 글자표에 없는 글자가 있으면 `None`. 성씨 규칙은 쓰지 않는다.
+    pub fn reading(&self, hanja: &str, word_start: bool) -> Option<String> {
+        let span = self.t.fold_str(hanja);
+        self.read(&span, word_start, false)
+    }
+
+    /// 독음 후보들: `[0]` 은 언제나 [`reading`](Self::reading) 과 같은 대표 독음이고,
+    /// 뒤로 다독음 글자 조합(樂 낙·락·요 …)과 괄호 병기(거란(글안) → 글안)를 `limit` 개까지 붙인다.
+    /// 형태소 분석기가 후보마다 사전을 다시 찾아 고르는 데 쓴다 (madi).
+    pub fn readings(&self, hanja: &str, word_start: bool, limit: usize) -> Vec<String> {
+        let span = self.t.fold_str(hanja);
+        let Some(pieces) = self.segment(&span, word_start) else { return Vec::new() };
+        // 조각마다 선택지: [0] = 기본
+        let opts: Vec<Vec<Vec<char>>> = pieces
+            .iter()
+            .map(|p| match p.src {
+                Some(h) => {
+                    let mut v = vec![p.text.clone()];
+                    if let Some(alts) = self.t.alts.get(&h) {
+                        for &a in alts {
+                            let a = if p.dueum { self.du(a) } else { a };
+                            if !v.iter().any(|x| x[0] == a) {
+                                v.push(vec![a]);
+                            }
+                        }
+                    }
+                    v
+                }
+                None => {
+                    let (main, gl) = split_gloss(&p.text);
+                    let mut v = vec![main];
+                    if let Some(g) = gl {
+                        v.push(g);
+                    }
+                    v
+                }
+            })
+            .collect();
+        let mut out: Vec<String> = Vec::new();
+        let mut idx = vec![0usize; opts.len()];
+        loop {
+            let chosen: Vec<Piece> = pieces
+                .iter()
+                .zip(&idx)
+                .zip(&opts)
+                .map(|((p, &k), o)| Piece { text: o[k].clone(), src: p.src, dueum: p.dueum })
+                .collect();
+            let r = self.finish(&chosen, word_start);
+            if !out.contains(&r) {
+                out.push(r);
+                if out.len() >= limit.max(1) {
+                    break;
+                }
+            }
+            // 다음 조합 (뒤 자리부터 올림)
+            let mut k = opts.len();
+            loop {
+                if k == 0 {
+                    return out;
+                }
+                k -= 1;
+                idx[k] += 1;
+                if idx[k] < opts[k].len() {
+                    break;
+                }
+                idx[k] = 0;
+            }
+        }
+        out
+    }
+
+    fn du(&self, s: char) -> char {
+        *self.t.dueum.get(&s).unwrap_or(&s)
+    }
+
+    /// 읽기 = 조각 나누기 + 후처리
+    fn read(&self, span: &[char], word_start: bool, gloss: bool) -> Option<String> {
+        let mut pieces = self.segment(span, word_start)?;
+        if !gloss {
+            for p in pieces.iter_mut().filter(|p| p.src.is_none()) {
+                p.text = split_gloss(&p.text).0;
+            }
+        }
+        Some(self.finish(&pieces, word_start))
+    }
+
+    /// 연쇄를 조각으로: 예외표 단어 조각 / 글자 조각 (두음까지 적용)
+    fn segment(&self, span: &[char], word_start: bool) -> Option<Vec<Piece>> {
+        let t = &self.t;
+        let n = span.len();
+        let mut out = Vec::with_capacity(n);
+        let mut i = 0;
+        while i < n {
+            // 1. 예외표 최장 일치
+            let mut hit = None;
+            for l in (1..=t.max_word.min(n - i)).rev() {
+                if let Some(v) = t.words.get(&span[i..i + l]) {
+                    hit = Some((l, v));
+                    break;
+                }
+            }
+            if let Some((l, v)) = hit {
+                let mut text: Vec<char> = v.chars().collect();
+                if i == 0 && word_start {
+                    if let Some(f) = text.first_mut() {
+                        *f = self.du(*f);
+                    }
+                }
+                out.push(Piece { text, src: None, dueum: false });
+                i += l;
+                continue;
+            }
+            // 2. 글자별 대표 독음
+            let c = span[i];
+            let mut r = *t.prim.get(&c)?;
+            let mut dueum = false;
+            if i == 0 && word_start {
+                dueum = true;
+            } else if i >= 1 && !t.dwords.is_empty() && !t.dblock.contains(&[span[i - 1], c]) {
+                // 합성어 안 두음: 여기서 두음 단어가 시작하는가
+                dueum = (2..=t.dmax.min(n - i)).rev().any(|l| t.dwords.contains(&span[i..i + l]));
+            }
+            if dueum {
+                r = self.du(r);
+            }
+            out.push(Piece { text: vec![r], src: Some(c), dueum });
+            i += 1;
+        }
+        Some(out)
+    }
+
+    /// 후처리: 글자 조각에만 不·렬/률 규칙
+    fn finish(&self, pieces: &[Piece], word_start: bool) -> String {
+        // 음절 단위로 펼친다: (음절, 원 한자 — 글자 조각일 때만)
+        let mut syl: Vec<(char, Option<char>)> = Vec::new();
+        for p in pieces {
+            match p.src {
+                Some(h) => syl.push((p.text[0], Some(h))),
+                None => syl.extend(p.text.iter().map(|&c| (c, None))),
+            }
+        }
+        let mut res: Vec<char> = syl.iter().map(|x| x.0).collect();
+        for k in 0..syl.len() {
+            let (s, Some(h)) = syl[k] else { continue };
+            if h == '不' {
+                let next_is_dj = res.get(k + 1).and_then(|&c| onset(c)).is_some_and(|o| o == ONSET_D || o == ONSET_J);
+                res[k] = if next_is_dj { '부' } else { '불' };
+                if k == 0 && word_start {
+                    res[k] = self.du(res[k]);
+                }
+            }
+            if k > 0 && (s == '렬' || s == '률') && matches!(coda(res[k - 1]), Some(0) | Some(4)) {
+                res[k] = if s == '렬' { '열' } else { '율' };
+            }
+        }
+        res.into_iter().collect()
+    }
 }
 
-
-// whether c is (korean or chinese character) or not
-fn is_kor_or_chi(c:&char) -> bool {
-    let n = *c as u32;
-    if (n >= KO_START && n <= KO_END) || 
-       ( (n >= CHI_S1 && n <= CHI_E1) || (n >= CHI_S2 && n <= CHI_E2) || 
-         (n >= CHI_S3 && n <= CHI_E3) || (n >= CHI_S4 && n <= CHI_E4)) {
-        true
-    }else {
-        false
-    }    
+/// 조각: 예외표 단어(`src = None`, 여러 음절) 또는 글자 하나(`src = Some(한자)`)
+#[derive(Debug, Clone)]
+struct Piece {
+    text: Vec<char>,
+    src: Option<char>,
+    /// 글자 조각에 두음을 적용했는가 (다독음 후보에도 같게 적용)
+    dueum: bool,
 }
 
-
-// whether c is chinese character or not
-fn is_chi(c:&char) -> bool {
-    let n = *c as u32;
-    if  (n >= CHI_S1 && n <= CHI_E1) || (n >= CHI_S2 && n <= CHI_E2) || 
-        (n >= CHI_S3 && n <= CHI_E3) || (n >= CHI_S4 && n <= CHI_E4) { 
-        true 
-    }else { false }  
+/// `거란(글안)` → (`거란`, Some(`글안`))
+fn split_gloss(v: &[char]) -> (Vec<char>, Option<Vec<char>>) {
+    match v.iter().position(|&c| c == '(') {
+        Some(p) => {
+            let g: Vec<char> = v[p + 1..].iter().copied().filter(|&c| c != ')').collect();
+            (v[..p].to_vec(), if g.is_empty() { None } else { Some(g) })
+        }
+        None => (v.to_vec(), None),
+    }
 }
 
+/// 한자인가: CJK 통합 한자(기본·확장 A~H), 호환 한자 (호환 한자 보충 U+2F800~ 은 확장 범위 안에 든다)
+pub fn is_hanja(c: char) -> bool {
+    matches!(c as u32,
+        0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x3134F)
+}
 
-// hello.txt -> hello(한글화).txt
-fn get_new_file_path(file_path:&str) -> String{
-    let pos_point = file_path.len() - 4; // ".txt" 형태라야함
-    "".to_owned() + &file_path[0..pos_point] + "(한글화).txt"
+/// 글에 한자가 하나라도 있는가
+pub fn contains_hanja(s: &str) -> bool {
+    s.chars().any(is_hanja)
+}
+
+fn is_syllable(c: char) -> bool {
+    ('\u{AC00}'..='\u{D7A3}').contains(&c)
+}
+
+const ONSET_D: u32 = 3; // ㄷ
+const ONSET_J: u32 = 12; // ㅈ
+
+/// 초성 번호 (ㄱ=0 … ㅎ=18)
+fn onset(c: char) -> Option<u32> {
+    is_syllable(c).then(|| (c as u32 - 0xAC00) / 588)
+}
+
+/// 받침 번호 (없음=0, ㄴ=4 …)
+fn coda(c: char) -> Option<u32> {
+    is_syllable(c).then(|| (c as u32 - 0xAC00) % 28)
 }
