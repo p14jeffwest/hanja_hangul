@@ -1,0 +1,12 @@
+# 줄 끝은 어디서 받아도 LF (Windows Git 의 core.autocrlf 설정과 무관하게).
+# include_str! 로 싣는 자료 파일이 플랫폼마다 같은 바이트가 되도록.
+* text=auto eol=lf
+*.rs   text eol=lf
+*.toml text eol=lf
+*.md   text eol=lf
+*.py   text eol=lf
+*.csv  text eol=lf
+*.tsv  text eol=lf
+*.txt  text eol=lf
+*.bat  -text
+*.xlsx binary
