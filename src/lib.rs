@@ -27,8 +27,10 @@
 //! 4. **렬·률 규칙** — 모음이나 ㄴ 받침 뒤의 렬·률은 열·율(分裂 분열, 比率 비율).
 //! 5. **不** — ㄷ·ㅈ 앞에서 부, 그 밖에는 불(不當 부당, 不法 불법).
 //! 6. **茶** — 대표 독음은 차(綠茶 녹차, 茶 한 잔). 茶房 다방·茶道 다도처럼 앞자리 '다' 는 예외표가 받는다.
-//! 7. **성씨** — 金·沈·葉·契·單 으로 시작하는 연쇄가 보통 낱말(金額 금액)이 아니면 성씨 독음
-//!    (金泳三 김영삼, 金대통령 김대통령). [`Options::surname`] 으로 끈다.
+//! 7. **인명** — 金·沈·葉·契·單 으로 시작하는 연쇄가 보통 낱말(金額 금액)이 아니면 성씨 독음
+//!    (金泳三 김영삼, 金대통령 김대통령). 흔한 성 한자 + 두 글자 이름이면 이름 첫 음절에 두음
+//!    (李龍俊 이용준, 金令培 김영배). 연쇄 전체가 예외표에 있으면 예외표가 이긴다.
+//!    [`Options::surname`] 으로 끈다.
 //!
 //! 사전 표제어로 잰 정확도와 자료 출처는 README 를 보라.
 
@@ -56,7 +58,7 @@ pub enum Style {
 pub struct Options {
     /// 출력 꼴
     pub style: Style,
-    /// 성씨 규칙(金泳三 김영삼). 끄면 金 은 늘 금.
+    /// 인명 규칙: 성씨(金泳三 김영삼)와 이름 첫 음절 두음(李龍俊 이용준). 끄면 金 은 늘 금.
     pub surname: bool,
 }
 
@@ -72,6 +74,9 @@ pub struct Converter {
     t: Tables,
     opts: Options,
 }
+
+/// 이름 첫 음절 두음 규칙을 쓰는 흔한 성 한자
+const NAME_SURNAMES: &str = "金李朴崔鄭姜趙尹張林韓吳徐申權黃安宋柳洪全高文孫梁裵白曺許劉南沈盧河丁成郭車兪具禹朱任羅辛閔陳池嚴蔡元千方孔玄咸卞楊廉邊呂秋魯都蘇愼石宣薛馬吉周延表明魏潘王琴玉陸印孟諸卓秦慶睦太奇殷片龍芮邢偰鞠陰甘";
 
 /// 성씨 독음 (두음법칙으로 해결되지 않는 다독음 성씨만; 李·盧·柳·林 은 두음법칙이 맡는다)
 const SURNAMES: [(char, char); 5] = [('金', '김'), ('沈', '심'), ('葉', '섭'), ('契', '글'), ('單', '선')];
@@ -181,14 +186,38 @@ impl Converter {
         }
     }
 
-    /// 성씨 규칙을 얹은 읽기
+    /// 인명 규칙을 얹은 읽기. 순서: 예외표 → 성씨 → 이름 첫 음절 두음
     fn read_with_surname(&self, span: &[char], word_start: bool, gloss: bool) -> Option<String> {
-        if self.opts.surname {
-            if let Some(r) = self.surname_reading(span, gloss) {
-                return Some(r);
+        let mut r = self.read(span, word_start, gloss)?;
+        if !self.opts.surname {
+            return Some(r);
+        }
+        // 연쇄 전체가 예외표에 있으면 예외표가 이긴다 (사전 인명 표제어 金龍煥 김용환)
+        let exact = self.t.words.contains_key(span);
+        let mut surname = false;
+        if !exact {
+            if let Some(s) = self.surname_reading(span, gloss) {
+                r = s;
+                surname = true;
             }
         }
-        self.read(span, word_start, gloss)
+        // 이름 첫 음절 두음: 흔한 성 한자 + 두 글자 이름 (李龍俊 이용준, 金令培 김영배, 權魯甲 권노갑).
+        // 사전 3자어(全羅道)이거나 앞 두 글자가 사전 2자어(權力化 의 權力)면 하지 않는다.
+        // 단 성씨 규칙이 이미 인명으로 봤으면 2자어 막기는 건너뛴다 (金龍洙: 金龍 금룡 은 낱말이지만 인명).
+        if span.len() == 3
+            && !exact
+            && !self.t.name_block.is_empty()
+            && NAME_SURNAMES.contains(span[0])
+            && !self.t.name_block.contains(span)
+            && (surname || !self.t.dblock.contains(&[span[0], span[1]]))
+        {
+            let mut cs: Vec<char> = r.chars().collect();
+            if cs.len() == 3 {
+                cs[1] = self.du(cs[1]);
+                r = cs.into_iter().collect();
+            }
+        }
+        Some(r)
     }
 
     /// 金·沈·葉·契·單 으로 시작하는 연쇄를 성씨로 읽을지.

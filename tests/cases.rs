@@ -17,6 +17,8 @@ fn irregular_words() {
 fn polyphonic_by_dictionary() {
     assert_eq!(conv("樂園 音樂 快樂"), "낙원 음악 쾌락");
     assert_eq!(conv("便所 遊說 北京 行列"), "변소 유세 북경 행렬");
+    // 독음이 둘인 표제어는 신문 괄호 병기에서 쓰인 쪽 (不實 부실; 불실 도 표제어)
+    assert_eq!(conv("不實 雲龍"), "부실 운룡");
 }
 
 #[test]
@@ -46,6 +48,9 @@ fn surnames() {
     assert_eq!(conv("金泳三 金大中 金正日 沈大平 金浦空港"), "김영삼 김대중 김정일 심대평 김포공항");
     assert_eq!(conv("金대통령 金총리 沈淸傳"), "김대통령 김총리 심청전");
     assert_eq!(conv("金額 金融市場 金曜日 沈默 葉書 契約 單獨"), "금액 금융시장 금요일 침묵 엽서 계약 단독");
+    // 이름 첫 음절 두음, 예외표 우선, 사전 3자어·2자어 막기
+    assert_eq!(conv("李龍俊 金令培 權魯甲 韓利憲 金龍洙 金龍煥 金鍾泌"), "이용준 김영배 권노갑 한이헌 김용수 김용환 김종필");
+    assert_eq!(conv("全羅道 元老院 權力化 文理大"), "전라도 원로원 권력화 문리대");
     let off = Converter::new().with_options(Options { surname: false, ..Options::default() });
     assert_eq!(off.convert("金泳三"), "금영삼");
 }

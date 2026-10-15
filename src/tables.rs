@@ -15,6 +15,7 @@
 //! | 합성어 두음 | `data/dueum_words.txt` | 연쇄 중간에서 시작하면 두음을 적용할 단어 |
 //! | 두음 막기 | `data/dueum_block.txt` | 앞 글자와 이 짝을 이루면 합성어 두음을 막는 2자어 |
 //! | 성씨 막기 | `data/surname_block.txt` | 金·沈·葉·契·單 으로 시작하는 보통 낱말 |
+//! | 이름 막기 | `data/name_block.txt` | 성+이름 꼴 3자 사전어(全羅道 전라도) — 이름 첫 음절 두음을 적용하지 않음 |
 //! | 호환 한자 | `data/compat.csv` | 호환 한자 → 통합 한자 (Unicode NFC) |
 
 use std::collections::{HashMap, HashSet};
@@ -34,6 +35,8 @@ const DUEUM_WORDS: &str = include_str!("../data/dueum_words.txt");
 const DUEUM_BLOCK: &str = include_str!("../data/dueum_block.txt");
 #[cfg(feature = "nikl")]
 const SURNAME_BLOCK: &str = include_str!("../data/surname_block.txt");
+#[cfg(feature = "nikl")]
+const NAME_BLOCK: &str = include_str!("../data/name_block.txt");
 
 /// 변환에 쓰는 표 전부. `Converter` 가 하나를 가진다.
 #[derive(Debug, Default, Clone)]
@@ -57,6 +60,8 @@ pub(crate) struct Tables {
     pub dblock: HashSet<[char; 2]>,
     /// 성씨로 읽지 않는 金·沈·葉·契·單 시작 낱말
     pub surname_block: HashSet<Vec<char>>,
+    /// 성+이름 꼴 3자 사전어
+    pub name_block: HashSet<Vec<char>>,
 }
 
 /// 주석·빈 줄·BOM 을 걷어 낸 줄들
@@ -185,6 +190,9 @@ impl Tables {
             }
             for l in lines(SURNAME_BLOCK) {
                 t.surname_block.insert(l.chars().collect());
+            }
+            for l in lines(NAME_BLOCK) {
+                t.name_block.insert(l.chars().collect());
             }
         }
         t

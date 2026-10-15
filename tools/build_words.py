@@ -20,7 +20,7 @@ os.makedirs(OUT, exist_ok=True)
 
 SURNAME = {'金': '김', '沈': '심', '葉': '섭', '契': '글', '單': '선'}
 SURNAME_PLAIN = {'金': '금', '沈': '침', '葉': '엽', '契': '계', '單': '단'}
-FIXED = set(SURNAME) | {'不', '茶'}     # 자동으로 대표 독음을 바꾸지 않는 글자 (茶: 한 글자 '차' 가 흔함, 10.15 Jeff)
+FIXED = set(SURNAME) | {'不', '茶', '泌'}   # 자동으로 대표 독음을 바꾸지 않는 글자 (茶: 한 글자 '차' 가 흔함, 10.15 Jeff; 泌: 인명 金鍾泌 김종필 — 신문 괄호 병기 2,155회)
 UNITS = {'단어', '어휘', '구'}
 
 rep = []
@@ -190,6 +190,14 @@ if len(sys.argv) > 5:
             f_, n_ = line.rstrip('\n').split('\t')
             FREQ[f_] = int(n_)
 
+# 신문 괄호 병기 쌍 (金鍾泌(김종필)): 독음이 둘 이상인 표제어에서 실제로 쓰인 쪽을 고르는 데만 쓴다
+NEWS = collections.defaultdict(collections.Counter)
+if len(sys.argv) > 6:
+    for line in open(sys.argv[6], encoding='utf-8'):
+        if not line.startswith('#'):
+            h_, k_, n_ = line.rstrip('\n').split('\t')
+            NEWS[nfc(h_)][k_] += int(n_)
+
 # PLAIN: 예외표 없는 글자별 변환기 (대표 독음 확정 직후에 만든다)
 
 def accepted(key):
@@ -204,6 +212,12 @@ def accepted(key):
         rs = {r[:-1] + '차' if r[-1] == '다' else r for r in rs}
     if len(rs) == 1:
         return rs
+    # 신문 괄호 병기에서 한쪽이 3회 이상, 다른 쪽의 3배 이상 쓰였으면 그쪽 (不實: 부실, 불실 아님)
+    nw = NEWS.get(key)
+    if nw:
+        cand = sorted(((nw[r], r) for r in rs if nw[r] > 0), reverse=True)
+        if cand and cand[0][0] >= 3 and (len(cand) == 1 or cand[0][0] >= 3 * cand[1][0]):
+            return {cand[0][1]}
     m = {r for r in rs if (key, r) in marked}
     if m:
         pc = PLAIN.reading(key)
@@ -358,7 +372,13 @@ with open(os.path.join(DATA, 'surname_block.txt'), 'w', encoding='utf-8') as w:
     w.write(HDR + '金·沈·葉·契·單 으로 시작하고 성씨 아닌 독음(금·침·엽·계·단)으로 읽는 2~4자 표제어. '
             '연쇄가 2~3자면 연쇄 전체가, 4자 이상이면 앞 2~4자가 여기 있을 때 성씨로 읽지 않는다.\n')
     w.write('\n'.join(sp) + '\n')
-sizes = {f: os.path.getsize(os.path.join(DATA, f)) for f in ('words_nikl.csv', 'dueum_words.txt', 'dueum_block.txt', 'surname_block.txt', 'chars_ext.csv', 'alts_nikl.csv')}
+# 성+이름처럼 생긴 사전 3자어: 첫 글자가 흔한 성 한자이고 둘째 글자 대표 독음이 두음 대상 (全羅道 전라도, 元老院 원로원)
+NAME_SUR = set('金李朴崔鄭姜趙尹張林韓吳徐申權黃安宋柳洪全高文孫梁裵白曺許劉南沈盧河丁成郭車兪具禹朱任羅辛閔陳池嚴蔡元千方孔玄咸卞楊廉邊呂秋魯都蘇愼石宣薛馬吉周延表明魏潘王琴玉陸印孟諸卓秦慶睦太奇殷片龍芮邢偰鞠陰甘')
+nb = sorted(k for k in keys if len(k) == 3 and k[0] in NAME_SUR and prim.get(k[1]) in dueum)
+with open(os.path.join(DATA, 'name_block.txt'), 'w', encoding='utf-8') as w:
+    w.write(HDR + '성+이름 꼴 3자 사전어: 이 낱말이면 이름 첫 음절 두음(李龍俊 이용준)을 적용하지 않는다.\n')
+    w.write('\n'.join(nb) + '\n')
+sizes = {f: os.path.getsize(os.path.join(DATA, f)) for f in ('words_nikl.csv', 'dueum_words.txt', 'dueum_block.txt', 'surname_block.txt', 'name_block.txt', 'chars_ext.csv', 'alts_nikl.csv', 'primary_override.csv')}
 say('\n## 5. 크레이트에 싣는 생성 자료')
 for f, s in sizes.items():
     say(f'- data/{f}: {s/1024:.0f} KB')
